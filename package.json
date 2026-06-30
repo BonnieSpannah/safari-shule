@@ -1,0 +1,24 @@
+{
+  "name": "safari-shule",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kenyan multi-tenant school transport management platform.",
+  "engines": {
+    "node": ">=20.11.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r --parallel build",
+    "dev": "pnpm -r --parallel dev",
+    "lint": "pnpm -r --parallel lint",
+    "test": "pnpm -r --parallel test",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
+    "api": "pnpm --filter @safari-shule/api",
+    "web": "pnpm --filter @safari-shule/web",
+    "types": "pnpm --filter @safari-shule/shared-types"
+  },
+  "devDependencies": {
+    "prettier": "3.3.3",
+    "typescript": "5.5.4"
+  }
+}

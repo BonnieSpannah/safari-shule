@@ -1,0 +1,980 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [postgis, pgcrypto, pg_trgm]
+}
+
+// =========================================================================
+// ENUMS
+// =========================================================================
+
+enum PlanTier {
+  basic
+  pro
+  enterprise
+}
+
+enum UserStatus {
+  active
+  invited
+  suspended
+}
+
+enum Gender {
+  male
+  female
+  other
+}
+
+enum ParentRelation {
+  mother
+  father
+  guardian
+  other
+}
+
+enum AttributeTargetEntity {
+  staff
+  student
+  parent
+  caretaker
+}
+
+enum AttributeFieldType {
+  string
+  number
+  phone
+  date
+  select
+  boolean
+}
+
+enum VehicleStatus {
+  active
+  maintenance
+  retired
+}
+
+enum VehicleOwnership {
+  school
+  hired
+}
+
+enum RepairStatus {
+  reported
+  approved
+  paid
+  rejected
+}
+
+enum FuelPaymentStatus {
+  pending
+  paid
+  failed
+}
+
+enum GeofenceKind {
+  route_corridor
+  school_zone
+  restricted
+}
+
+enum TripStatus {
+  scheduled
+  in_progress
+  completed
+  cancelled
+}
+
+enum TripDirection {
+  morning_pickup
+  evening_dropoff
+}
+
+enum AttendanceDirection {
+  boarding
+  alighting
+}
+
+enum IncidentKind {
+  sos
+  traffic
+  puncture
+  mechanical
+  accident
+  other
+}
+
+enum IncidentStatus {
+  reported
+  acknowledged
+  resolved
+}
+
+enum IncidentSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum NotificationChannel {
+  sms
+  email
+  push
+}
+
+enum NotificationStatus {
+  queued
+  sent
+  delivered
+  failed
+  quota_exceeded
+}
+
+enum MpesaTransactionPurpose {
+  fuel
+  repair
+}
+
+enum MpesaTransactionStatus {
+  initiated
+  succeeded
+  failed
+  cancelled
+}
+
+enum RfidDeviceStatus {
+  active
+  rotating
+  disabled
+}
+
+// =========================================================================
+// TENANCY, RBAC, AUDIT, FEATURE FLAGS
+// =========================================================================
+
+model Tenant {
+  id            String   @id @default(uuid()) @db.Uuid
+  slug          String   @unique
+  subdomain     String   @unique
+  name          String
+  contactEmail  String
+  planTier      PlanTier @default(basic)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  users               User[]
+  roles               Role[]
+  permissions         Permission[]
+  rolePermissions     RolePermission[]
+  userRoles           UserRole[]
+  features            TenantFeature[]
+  auditLogs           AuditLog[]
+  refreshTokens       RefreshToken[]
+  otpCodes            OtpCode[]
+  attributeDefs       AttributeDefinition[]
+  staff               Staff[]
+  students            Student[]
+  parents             Parent[]
+  caretakers          Caretaker[]
+  parentStudents      ParentStudent[]
+  studentCaretakers   StudentCaretaker[]
+  invitations         Invitation[]
+  vehicles            Vehicle[]
+  fuelLogs            FuelLog[]
+  repairLogs          RepairLog[]
+  insuranceRecords    InsuranceRecord[]
+  routes              Route[]
+  busStops            BusStop[]
+  geofences           Geofence[]
+  routeAssignments    RouteAssignment[]
+  studentRouteAssignments StudentRouteAssignment[]
+  trips               Trip[]
+  tripPassengers      TripPassenger[]
+  tripLocationSnaps   TripLocationSnapshot[]
+  incidents           Incident[]
+  emergencyContacts   IncidentEmergencyContact[]
+  rfidDevices         RfidDevice[]
+  rfidTags            RfidTag[]
+  attendanceEvents    AttendanceEvent[]
+  unknownTagScans     UnknownTagScan[]
+  mpesaTransactions   MpesaTransaction[]
+  outboundMessages    OutboundMessage[]
+
+  @@index([isActive])
+  @@map("tenants")
+}
+
+model TenantFeature {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  featureKey  String
+  enabled     Boolean   @default(false)
+  limits      Json      @default("{}")
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, featureKey])
+  @@index([tenantId, enabled])
+  @@map("tenant_features")
+}
+
+model User {
+  id            String     @id @default(uuid()) @db.Uuid
+  tenantId      String     @db.Uuid
+  email         String
+  phoneE164     String?
+  passwordHash  String
+  status        UserStatus @default(invited)
+  fullName      String
+  lastLoginAt   DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  tenant         Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userRoles      UserRole[]
+  refreshTokens  RefreshToken[]
+  auditLogs      AuditLog[]     @relation("AuditActor")
+  invitationsSent Invitation[]  @relation("InvitationInviter")
+
+  @@unique([tenantId, email])
+  @@index([tenantId, status])
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  key         String
+  label       String
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+
+  @@unique([tenantId, key])
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  key         String
+  description String
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rolePermissions  RolePermission[]
+
+  @@unique([tenantId, key])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String @id @default(uuid()) @db.Uuid
+  tenantId     String @db.Uuid
+  roleId       String @db.Uuid
+  permissionId String @db.Uuid
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  userId    String   @db.Uuid
+  roleId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, roleId])
+  @@map("user_roles")
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @db.Uuid
+  userId     String    @db.Uuid
+  tokenHash  String    @unique
+  revokedAt  DateTime?
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId])
+  @@map("refresh_tokens")
+}
+
+model OtpCode {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @db.Uuid
+  phoneE164  String
+  codeHash   String
+  purpose    String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, phoneE164, purpose])
+  @@map("otp_codes")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  actorUserId  String?  @db.Uuid
+  action       String
+  entityType   String
+  entityId     String?
+  before       Json?
+  after        Json?
+  ipAddress    String?
+  userAgent    String?
+  requestId    String?
+  createdAt    DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actor  User?  @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, entityType, createdAt(sort: Desc)])
+  @@index([tenantId, actorUserId, createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+model Invitation {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @db.Uuid
+  inviterId    String    @db.Uuid
+  email        String
+  phoneE164    String?
+  fullName     String
+  roleKeys     String[]
+  tokenHash    String    @unique
+  acceptedAt   DateTime?
+  expiresAt    DateTime
+  createdAt    DateTime  @default(now())
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inviter User   @relation("InvitationInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, email])
+  @@map("invitations")
+}
+
+// =========================================================================
+// CUSTOM ATTRIBUTE ENGINE
+// =========================================================================
+
+model AttributeDefinition {
+  id            String                @id @default(uuid()) @db.Uuid
+  tenantId      String                @db.Uuid
+  targetEntity  AttributeTargetEntity
+  slug          String
+  label         String
+  fieldType     AttributeFieldType
+  isRequired    Boolean               @default(false)
+  isNullable    Boolean               @default(true)
+  options       Json?
+  regex         String?
+  min           Float?
+  max           Float?
+  sortOrder     Int                   @default(0)
+  archivedAt    DateTime?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, targetEntity, slug])
+  @@index([tenantId, targetEntity, archivedAt])
+  @@map("attribute_definitions")
+}
+
+// =========================================================================
+// PROFILES
+// =========================================================================
+
+model Staff {
+  id                  String   @id @default(uuid()) @db.Uuid
+  tenantId            String   @db.Uuid
+  userId              String?  @unique @db.Uuid
+  employeeNumber      String
+  legalName           String
+  nationalId          String
+  phoneE164           String
+  email               String?
+  position            String
+  dateOfBirth         DateTime @db.Date
+  gender              Gender
+  flexibleAttributes  Json     @default("{}")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, employeeNumber])
+  @@index([tenantId, legalName])
+  @@map("staff")
+}
+
+model Student {
+  id                       String   @id @default(uuid()) @db.Uuid
+  tenantId                 String   @db.Uuid
+  admissionNumber          String
+  legalName                String
+  birthCertificateNumber   String?
+  classroom                String?
+  dateOfBirth              DateTime @db.Date
+  gender                   Gender
+  flexibleAttributes       Json     @default("{}")
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parents           ParentStudent[]
+  caretakers        StudentCaretaker[]
+  routeAssignments  StudentRouteAssignment[]
+  tripPassengers    TripPassenger[]
+  attendanceEvents  AttendanceEvent[]
+  rfidTags          RfidTag[]
+
+  @@unique([tenantId, admissionNumber])
+  @@index([tenantId, legalName])
+  @@map("students")
+}
+
+model Parent {
+  id                  String   @id @default(uuid()) @db.Uuid
+  tenantId            String   @db.Uuid
+  userId              String?  @unique @db.Uuid
+  legalName           String
+  phoneE164           String
+  email               String?
+  nationalId          String?
+  occupation          String?
+  dateOfBirth         DateTime @db.Date
+  gender              Gender
+  flexibleAttributes  Json     @default("{}")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  students ParentStudent[]
+
+  @@unique([tenantId, phoneE164])
+  @@index([tenantId, legalName])
+  @@map("parents")
+}
+
+model Caretaker {
+  id                  String   @id @default(uuid()) @db.Uuid
+  tenantId            String   @db.Uuid
+  legalName           String
+  phoneE164           String
+  relationship        String
+  nationalId          String?
+  dateOfBirth         DateTime @db.Date
+  gender              Gender
+  flexibleAttributes  Json     @default("{}")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tenant   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  students StudentCaretaker[]
+
+  @@unique([tenantId, phoneE164])
+  @@map("caretakers")
+}
+
+model ParentStudent {
+  id         String         @id @default(uuid()) @db.Uuid
+  tenantId   String         @db.Uuid
+  parentId   String         @db.Uuid
+  studentId  String         @db.Uuid
+  relation   ParentRelation @default(guardian)
+  isPrimary  Boolean        @default(false)
+  createdAt  DateTime       @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent  Parent  @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, parentId, studentId])
+  @@index([tenantId, studentId])
+  @@map("parent_students")
+}
+
+model StudentCaretaker {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  studentId   String   @db.Uuid
+  caretakerId String   @db.Uuid
+  isPrimary   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  caretaker Caretaker @relation(fields: [caretakerId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, studentId, caretakerId])
+  @@map("student_caretakers")
+}
+
+// =========================================================================
+// FLEET, ROUTES, FINANCIALS
+// =========================================================================
+
+model Vehicle {
+  id                   String           @id @default(uuid()) @db.Uuid
+  tenantId             String           @db.Uuid
+  registration         String
+  make                 String
+  model                String
+  year                 Int
+  capacity             Int
+  ownership            VehicleOwnership
+  status               VehicleStatus    @default(active)
+  assignedDriverId     String?          @db.Uuid
+  assignedAssistantId  String?          @db.Uuid
+  odometerKm           Int              @default(0)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  insuranceRecords  InsuranceRecord[]
+  fuelLogs          FuelLog[]
+  repairLogs        RepairLog[]
+  routeAssignments  RouteAssignment[]
+  trips             Trip[]
+  rfidDevices       RfidDevice[]
+  geofences         Geofence[]
+
+  @@unique([tenantId, registration])
+  @@index([tenantId, status])
+  @@map("vehicles")
+}
+
+model InsuranceRecord {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @db.Uuid
+  vehicleId     String   @db.Uuid
+  provider      String
+  policyNumber  String
+  premiumKes    Int
+  startsOn      DateTime @db.Date
+  expiresOn     DateTime @db.Date
+  documentUrl   String?
+  createdAt     DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, vehicleId, expiresOn])
+  @@map("insurance_records")
+}
+
+model FuelLog {
+  id                    String             @id @default(uuid()) @db.Uuid
+  tenantId              String             @db.Uuid
+  vehicleId             String             @db.Uuid
+  driverUserId          String             @db.Uuid
+  liters                Decimal            @db.Decimal(10, 2)
+  costKes               Int
+  station               String
+  odometerKm            Int
+  mpesaTransactionId    String?            @db.Uuid
+  paymentStatus         FuelPaymentStatus  @default(pending)
+  occurredAt            DateTime
+  createdAt             DateTime           @default(now())
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vehicle  Vehicle           @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  mpesaTxn MpesaTransaction? @relation(fields: [mpesaTransactionId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, vehicleId, occurredAt(sort: Desc)])
+  @@map("fuel_logs")
+}
+
+model RepairLog {
+  id                  String        @id @default(uuid()) @db.Uuid
+  tenantId            String        @db.Uuid
+  vehicleId           String        @db.Uuid
+  reportedByUserId    String        @db.Uuid
+  approvalUserId      String?       @db.Uuid
+  description         String
+  vendor              String
+  costKes             Int
+  status              RepairStatus  @default(reported)
+  occurredOn          DateTime      @db.Date
+  mpesaTransactionId  String?       @db.Uuid
+  createdAt           DateTime      @default(now())
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vehicle  Vehicle           @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  mpesaTxn MpesaTransaction? @relation(fields: [mpesaTransactionId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, vehicleId, status])
+  @@map("repair_logs")
+}
+
+model Route {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  startPoint  Unsupported("geography(Point, 4326)")
+  endPoint    Unsupported("geography(Point, 4326)")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant                  Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  busStops                BusStop[]
+  geofences               Geofence[]
+  assignments             RouteAssignment[]
+  studentAssignments      StudentRouteAssignment[]
+  trips                   Trip[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, isActive])
+  @@map("routes")
+}
+
+model BusStop {
+  id                   String   @id @default(uuid()) @db.Uuid
+  tenantId             String   @db.Uuid
+  routeId              String   @db.Uuid
+  name                 String
+  pickupOrder          Int
+  scheduledPickupTime  String
+  scheduledDropoffTime String
+  location             Unsupported("geography(Point, 4326)")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  route  Route  @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  studentAssignments StudentRouteAssignment[]
+
+  @@unique([tenantId, routeId, pickupOrder])
+  @@index([tenantId, routeId])
+  @@map("bus_stops")
+}
+
+model Geofence {
+  id         String       @id @default(uuid()) @db.Uuid
+  tenantId   String       @db.Uuid
+  name       String
+  kind       GeofenceKind
+  routeId    String?      @db.Uuid
+  vehicleId  String?      @db.Uuid
+  polygon    Unsupported("geography(Polygon, 4326)")
+  createdAt  DateTime     @default(now())
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  route   Route?   @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  vehicle Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, kind])
+  @@map("geofences")
+}
+
+model RouteAssignment {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  routeId     String   @db.Uuid
+  vehicleId   String   @db.Uuid
+  daysOfWeek  Int[]
+  validFrom   DateTime @db.Date
+  validTo     DateTime? @db.Date
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  route   Route   @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, routeId])
+  @@index([tenantId, vehicleId])
+  @@map("route_assignments")
+}
+
+model StudentRouteAssignment {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  studentId   String   @db.Uuid
+  routeId     String   @db.Uuid
+  busStopId   String   @db.Uuid
+  validFrom   DateTime @db.Date
+  validTo     DateTime? @db.Date
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  route   Route   @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  busStop BusStop @relation(fields: [busStopId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, studentId, routeId, validFrom])
+  @@index([tenantId, routeId])
+  @@map("student_route_assignments")
+}
+
+// =========================================================================
+// TRIPS, TELEMETRY, INCIDENTS
+// =========================================================================
+
+model Trip {
+  id                String         @id @default(uuid()) @db.Uuid
+  tenantId          String         @db.Uuid
+  routeId           String         @db.Uuid
+  vehicleId         String         @db.Uuid
+  driverUserId      String         @db.Uuid
+  assistantUserId   String?        @db.Uuid
+  scheduledStart    DateTime
+  startedAt         DateTime?
+  endedAt           DateTime?
+  status            TripStatus     @default(scheduled)
+  direction         TripDirection
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  tenant            Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  route             Route                 @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  vehicle           Vehicle               @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  passengers        TripPassenger[]
+  locationSnapshots TripLocationSnapshot[]
+  incidents         Incident[]
+  attendanceEvents  AttendanceEvent[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, vehicleId, scheduledStart])
+  @@map("trips")
+}
+
+model TripPassenger {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  tripId      String    @db.Uuid
+  studentId   String    @db.Uuid
+  expected    Boolean   @default(true)
+  boardedAt   DateTime?
+  alightedAt  DateTime?
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trip    Trip    @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, tripId, studentId])
+  @@map("trip_passengers")
+}
+
+model TripLocationSnapshot {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  tripId      String   @db.Uuid
+  speedKph    Float
+  headingDeg  Float
+  recordedAt  DateTime
+  location    Unsupported("geography(Point, 4326)")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, tripId, recordedAt(sort: Desc)])
+  @@map("trip_location_snapshots")
+}
+
+model Incident {
+  id                  String           @id @default(uuid()) @db.Uuid
+  tenantId            String           @db.Uuid
+  tripId              String           @db.Uuid
+  kind                IncidentKind
+  severity            IncidentSeverity @default(medium)
+  status              IncidentStatus   @default(reported)
+  reportedByUserId    String?          @db.Uuid
+  description         String
+  location            Unsupported("geography(Point, 4326)")?
+  acknowledgedAt      DateTime?
+  resolvedAt          DateTime?
+  resolutionNotes     String?
+  occurredAt          DateTime         @default(now())
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status, severity])
+  @@index([tenantId, kind, occurredAt(sort: Desc)])
+  @@map("incidents")
+}
+
+model IncidentEmergencyContact {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  name        String
+  phoneE164   String
+  role        String
+  priority    Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, isActive, priority])
+  @@map("incident_emergency_contacts")
+}
+
+// =========================================================================
+// RFID HARDWARE
+// =========================================================================
+
+model RfidDevice {
+  id                  String            @id @default(uuid()) @db.Uuid
+  tenantId            String            @db.Uuid
+  deviceId            String
+  vehicleId           String?           @db.Uuid
+  apiKeyHash          String
+  hmacSecretEncrypted String
+  status              RfidDeviceStatus  @default(active)
+  lastSeenAt          DateTime?
+  keyRotatedAt        DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vehicle Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  attendanceEvents AttendanceEvent[]
+
+  @@unique([tenantId, deviceId])
+  @@index([tenantId, status])
+  @@map("rfid_devices")
+}
+
+model RfidTag {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @db.Uuid
+  tagUid     String
+  studentId  String    @db.Uuid
+  issuedAt   DateTime  @default(now())
+  revokedAt  DateTime?
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  attendanceEvents AttendanceEvent[]
+
+  @@unique([tenantId, tagUid])
+  @@index([tenantId, studentId])
+  @@map("rfid_tags")
+}
+
+model AttendanceEvent {
+  id           String              @id @default(uuid()) @db.Uuid
+  tenantId     String              @db.Uuid
+  tripId       String              @db.Uuid
+  studentId    String              @db.Uuid
+  deviceId     String              @db.Uuid
+  tagId        String              @db.Uuid
+  direction    AttendanceDirection
+  scannedAt    DateTime
+  ingestedAt   DateTime            @default(now())
+  rawPayload   Json
+
+  tenant  Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trip    Trip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  student Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  device  RfidDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  tag     RfidTag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, deviceId, tagId, scannedAt])
+  @@index([tenantId, tripId, scannedAt(sort: Desc)])
+  @@index([tenantId, studentId, scannedAt(sort: Desc)])
+  @@map("attendance_events")
+}
+
+model UnknownTagScan {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  deviceId   String
+  tagUid     String
+  scannedAt  DateTime
+  ingestedAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, tagUid])
+  @@map("unknown_tag_scans")
+}
+
+// =========================================================================
+// M-PESA & OUTBOUND MESSAGES
+// =========================================================================
+
+model MpesaTransaction {
+  id                    String                  @id @default(uuid()) @db.Uuid
+  tenantId              String                  @db.Uuid
+  purpose               MpesaTransactionPurpose
+  amountKes             Int
+  phoneE164             String
+  accountReference      String
+  checkoutRequestId     String                  @unique
+  merchantRequestId     String?
+  mpesaReceiptNumber    String?
+  status                MpesaTransactionStatus  @default(initiated)
+  resultCode            Int?
+  resultDescription     String?
+  callbackPayload       Json?
+  initiatedAt           DateTime                @default(now())
+  completedAt           DateTime?
+
+  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  fuelLogs   FuelLog[]
+  repairLogs RepairLog[]
+
+  @@index([tenantId, status, initiatedAt(sort: Desc)])
+  @@map("mpesa_transactions")
+}
+
+model OutboundMessage {
+  id                  String               @id @default(uuid()) @db.Uuid
+  tenantId            String               @db.Uuid
+  channel             NotificationChannel
+  to                  String
+  templateId          String
+  body                String
+  status              NotificationStatus   @default(queued)
+  providerMessageId   String?
+  costCents           Int?
+  error               String?
+  attempts            Int                  @default(0)
+  requestId           String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, channel, status, createdAt(sort: Desc)])
+  @@index([tenantId, templateId, createdAt(sort: Desc)])
+  @@map("outbound_messages")
+}
