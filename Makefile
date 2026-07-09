@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 
-.PHONY: help bootstrap up down logs ps restart migrate migrate-create seed reset \
+.PHONY: help bootstrap preflight uat-refresh up down logs ps restart migrate migrate-create seed reset \
         api-shell db-shell redis-shell test lint format clean \
         backup backup-list backup-verify restore-isolated db-masked-dump \
         access-grant access-revoke dnc-check retention-run
@@ -9,7 +9,16 @@ COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-bootstrap: ## Install all workspace dependencies
+bootstrap: ## One-command install: detect env, wire Herd, write .env, boot stack, migrate + seed
+	@./bin/bootstrap.sh
+
+preflight: ## Check prerequisites without changing anything
+	@./bin/preflight.sh
+
+uat-refresh: ## Load the latest masked prod snapshot into UAT (requires PROD_REPLICA_URL + UAT_TARGET_URL)
+	@./bin/uat-refresh.sh
+
+bootstrap-old: ## Legacy manual bootstrap (pnpm install only)
 	pnpm install
 
 up: ## Bring up the full stack (postgres, pgbouncer, redis, prometheus, grafana, glitchtip, api, web)

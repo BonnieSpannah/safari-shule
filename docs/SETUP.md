@@ -2,6 +2,27 @@
 
 Everything a fresh engineer needs to run the platform locally.
 
+## TL;DR — one command
+
+```bash
+make preflight        # verify prerequisites (no changes)
+make bootstrap        # animated installer — asks a few questions, then does everything
+```
+
+The bootstrap script ([bin/bootstrap.sh](../bin/bootstrap.sh)):
+
+- Detects your OS (macOS / Linux / WSL) and prerequisites.
+- Prompts for **environment** (dev / uat / prod-preview), **base domain**, **email + SMS provider**, **integrations mode**, **log level**, and whether to enable observability + queue dashboard + seed. Enter accepts the recommended default for each.
+- Generates all secrets (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `DATA_ENCRYPTION_KEY`, `POSTGRES_PASSWORD`) with cryptographic RNG.
+- On macOS + [Laravel Herd](https://herd.laravel.com): symlinks `~/Herd/safari-shule → this repo` and runs `herd secure` for `*.<your-domain>` HTTPS.
+- Renders `infra/nginx.conf` from `infra/nginx.conf.template` using your chosen base domain (drives API, web, and tenant subdomain routing).
+- Runs `pnpm install`, `docker compose up -d`, waits for healthchecks, `prisma migrate deploy`, and (for dev) `pnpm db:seed`.
+- Prints URLs + demo credentials + RFID device secrets.
+
+Re-running is safe (idempotent). Existing `.env` is preserved unless you explicitly overwrite; `nginx.conf` is regenerated each run.
+
+## Manual setup (if you prefer)
+
 ## 1. Prerequisites
 
 | Tool | Version | Install |

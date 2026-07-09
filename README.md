@@ -11,20 +11,35 @@
 
 ---
 
-## Quickstart (macOS)
+## Quickstart
+
+**Prereqs:** Docker Desktop, Node.js 20+, pnpm. On macOS, [Laravel Herd](https://herd.laravel.com) is optional but strongly recommended for `*.safari-shule.test` HTTPS.
 
 ```bash
 git clone git@github.com:BonnieSpannah/safari-shule.git
 cd safari-shule
-nvm use && corepack enable && pnpm install
-cp .env.example .env          # then set JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, DATA_ENCRYPTION_KEY
-make up && make migrate && make seed
-pnpm dev                       # api → :3000  ·  web → :5173
+make preflight    # verify your machine is ready (no changes)
+make bootstrap    # animated installer — .env, secrets, Herd, docker, migrate, seed
 ```
 
-Open http://localhost:5173 and log in as `admin@hillcrest.ac.ke` / `Demo!Password1`.
+That's it. The bootstrap will:
 
-Detailed setup: **[docs/SETUP.md](docs/SETUP.md)**
+1. Detect your OS + prerequisites
+2. Ask a handful of environment questions (Enter accepts sensible defaults)
+3. Generate all secrets (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `DATA_ENCRYPTION_KEY`, `POSTGRES_PASSWORD`)
+4. Wire Herd for `*.<your-domain>` HTTPS on macOS
+5. Render nginx from a template using your chosen base domain
+6. `pnpm install`, `docker compose up -d`, `prisma migrate deploy`, `pnpm db:seed`
+7. Print the URLs + demo credentials
+
+When it finishes you'll see:
+
+- **Web console** — `https://<your-domain>` (default `https://safari-shule.test`)
+- **API + Swagger** — `https://api.<your-domain>/docs`
+- **Tenant subdomain** — `https://hillcrest.<your-domain>`
+- **Mailhog / Grafana / Prometheus / GlitchTip / Bull Board** — links printed on success
+
+Detailed setup, custom domain wiring, and env-var reference: **[docs/SETUP.md](docs/SETUP.md)**.
 
 ## What's inside
 
@@ -53,6 +68,14 @@ Detailed setup: **[docs/SETUP.md](docs/SETUP.md)**
 - 🗺 **[Roadmap](docs/ROADMAP.md)** — sequenced milestones to production
 - 🚚 **[Contributing](docs/CONTRIBUTING.md)** — branch rules, commit format, PR checklist
 - 🩹 **[Troubleshooting](docs/TROUBLESHOOTING.md)** — common failures + fixes
+
+### Go-to-market
+
+- 💼 **[Pitch deck](docs/pitch/PITCH-DECK.md)** — investor-ready narrative, 17 slides
+- 🏫 **[Product brochure](docs/pitch/PRODUCT-BROCHURE.md)** — school-facing one-pager
+- 💰 **[Pricing](docs/pitch/PRICING.md)** — modest KES tiers with add-ons and hardware
+- 🏛 **[Government brief](docs/pitch/GOVERNMENT-BRIEF.md)** — MoE / NTSA / KRA / county partnership pitch
+
 - 📋 **[Session handoff](.copilot/SESSION-HANDOFF.md)** — what's built, what's next
 
 ## Hard rules
