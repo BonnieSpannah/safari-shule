@@ -69,6 +69,7 @@ describe('LoginPage', () => {
     const user = userEvent.setup();
     (loginApi as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       accessToken: 'test-token',
+      refreshToken: 'test-refresh',
       accessTtlSeconds: 900,
       refreshTtlSeconds: 604_800,
       user: {

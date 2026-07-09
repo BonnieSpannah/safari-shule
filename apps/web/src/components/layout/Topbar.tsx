@@ -11,11 +11,12 @@ export function Topbar() {
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
   const user = useAuthStore((s) => s.user);
+  const refreshToken = useAuthStore((s) => s.refreshToken);
   const clear = useAuthStore((s) => s.clear);
   const navigate = useNavigate();
 
   const logoutMutation = useMutation({
-    mutationFn: logoutApi,
+    mutationFn: () => logoutApi(refreshToken ?? ''),
     onSettled: () => {
       clear();
       navigate('/login', { replace: true });

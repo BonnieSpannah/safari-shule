@@ -12,7 +12,20 @@ import { GlobalExceptionFilter } from './common/errors/global-exception.filter';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
-    cors: true,
+  });
+
+  app.enableCors({
+    origin: (origin, cb) => cb(null, origin ?? true),
+    credentials: true,
+    exposedHeaders: ['X-Trace-Id', 'X-Required-Permissions'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Trace-Id',
+      'X-Tenant-Slug',
+      'X-Tenant-ID',
+      'X-Impersonation-Session-Id',
+    ],
   });
 
   app.useLogger(app.get(PinoLogger));

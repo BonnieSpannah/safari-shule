@@ -1,9 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
 import { Bus, Route as RouteIcon, Users, Siren } from 'lucide-react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { fetchMe } from '@/lib/api/auth';
 import { useAuthStore } from '@/stores/auth.store';
 
 interface Stat {
@@ -16,13 +14,6 @@ interface Stat {
 
 export function DashboardPage() {
   const user = useAuthStore((s) => s.user);
-
-  useQuery({
-    queryKey: ['me'],
-    queryFn: fetchMe,
-    staleTime: 60_000,
-    enabled: !user,
-  });
 
   const stats: Stat[] = [
     { label: 'Active vehicles', value: '—', hint: 'On duty right now', icon: Bus, tone: 'primary' },

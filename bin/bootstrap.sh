@@ -517,16 +517,34 @@ bring_up() {
     err "Timed out waiting for postgres/redis. Run ${U}make logs${R} to inspect."
     exit 1
   fi
+
+  # PgBouncer has no healthcheck but is up-and-running by the time postgres is
+  # healthy. Wait until it actually accepts a query.
+  local waited=0
+  while [[ $waited -lt 15 ]]; do
+    if docker exec safari-postgres pg_isready -h pgbouncer -p 5432 -U "$(env_val POSTGRES_USER)" >/dev/null 2>&1; then
+      ok "pgbouncer accepting connections"
+      return 0
+    fi
+    sleep 1; waited=$((waited + 1))
+  done
+  warn "pgbouncer readiness probe timed out; continuing (migrate uses direct connection anyway)"
 }
+
+env_val() { grep "^$1=" .env | cut -d= -f2- | tr -d '"'; }
 
 migrate_and_seed() {
   step "Migrating and seeding"
+  # Run from the HOST — always reliable. Uses DATABASE_URL from .env which
+  # points at localhost:6432 (pgbouncer → postgres). The api container's own
+  # copy of these values (env_file: ../.env + service-level overrides) is
+  # used for its own runtime, unrelated to this bootstrap step.
   run_spun "prisma migrate deploy" -- \
-    docker compose -f infra/docker-compose.yml --env-file .env exec -T api pnpm prisma migrate deploy
+    pnpm --filter @safari-shule/api exec prisma migrate deploy
 
   if [[ "$CFG_SEED" == "yes" && "$CFG_ENV" == "dev" ]]; then
     run_spun "seed Hillcrest demo tenant" -- \
-      docker compose -f infra/docker-compose.yml --env-file .env exec -T api pnpm db:seed
+      pnpm --filter @safari-shule/api run db:seed
   elif [[ "$CFG_ENV" == "uat" ]]; then
     info "Skipping seed — UAT loads masked prod snapshots. Run ${U}make uat-refresh${R} next."
   else

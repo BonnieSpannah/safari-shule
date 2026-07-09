@@ -1,5 +1,5 @@
 import axios, { AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
-import { env } from '@/lib/env';
+import { env, resolveTenantSlugFromHost } from '@/lib/env';
 import { useAuthStore } from '@/stores/auth.store';
 
 type RetryConfig = InternalAxiosRequestConfig & { _retry?: boolean };
@@ -10,17 +10,30 @@ function generateTraceId(): string {
   return crypto.randomUUID();
 }
 
+function currentTenantSlug(): string {
+  if (typeof window !== 'undefined') {
+    const fromHost = resolveTenantSlugFromHost(window.location.hostname);
+    if (fromHost) return fromHost;
+  }
+  return env.tenantSlug;
+}
+
 async function refreshAccessToken(client: AxiosInstance): Promise<string | null> {
   if (refreshPromise) return refreshPromise;
 
   refreshPromise = (async () => {
+    const currentRefresh = useAuthStore.getState().refreshToken;
+    if (!currentRefresh) {
+      useAuthStore.getState().clear();
+      return null;
+    }
     try {
-      const { data } = await client.post<{ accessToken: string }>(
+      const { data } = await client.post<{ accessToken: string; refreshToken: string }>(
         '/v1/auth/refresh',
-        {},
-        { withCredentials: true, _retry: true } as RetryConfig,
+        { refreshToken: currentRefresh },
+        { _retry: true } as RetryConfig,
       );
-      useAuthStore.getState().setAccessToken(data.accessToken);
+      useAuthStore.getState().setTokens(data.accessToken, data.refreshToken);
       return data.accessToken;
     } catch {
       useAuthStore.getState().clear();
@@ -46,6 +59,7 @@ export function createApiClient(): AxiosInstance {
       config.headers.Authorization = `Bearer ${accessToken}`;
     }
     config.headers['X-Trace-Id'] = generateTraceId();
+    config.headers['X-Tenant-Slug'] = currentTenantSlug();
     return config;
   });
 

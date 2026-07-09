@@ -42,7 +42,7 @@ export function LoginPage() {
   const mutation = useMutation({
     mutationFn: (values: FormValues) => login(values.email, values.password),
     onSuccess: (data) => {
-      setSession(data.accessToken, data.user);
+      setSession(data.accessToken, data.refreshToken, data.user);
       const from = (location.state as LocationState | null)?.from ?? '/';
       navigate(from, { replace: true });
     },

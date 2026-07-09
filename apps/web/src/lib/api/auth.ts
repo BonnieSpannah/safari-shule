@@ -5,12 +5,13 @@ export interface AuthUser {
   tenantId: string;
   email: string;
   fullName: string;
-  roles: string[];
-  permissions: string[];
+  roles?: string[];
+  permissions?: string[];
 }
 
 export interface LoginResponse {
   accessToken: string;
+  refreshToken: string;
   accessTtlSeconds: number;
   refreshTtlSeconds: number;
   user: AuthUser;
@@ -21,11 +22,11 @@ export async function login(email: string, password: string): Promise<LoginRespo
   return data;
 }
 
-export async function logout(): Promise<void> {
-  await api.post('/v1/auth/logout');
-}
-
-export async function fetchMe(): Promise<AuthUser> {
-  const { data } = await api.get<AuthUser>('/v1/auth/me');
-  return data;
+export async function logout(refreshToken: string): Promise<void> {
+  if (!refreshToken) return;
+  try {
+    await api.post('/v1/auth/logout', { refreshToken });
+  } catch {
+    // best-effort — local state is cleared regardless
+  }
 }
