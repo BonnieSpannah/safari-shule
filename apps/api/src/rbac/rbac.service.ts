@@ -4,7 +4,8 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { redisOptions } from '../config/redis.config';
 import {
   DEFAULT_ROLE_PERMISSIONS,
-  PERMISSION_KEYS,
+  PERMISSIONS,
+  PERMISSION_BUNDLES,
   ROLE_KEYS,
   type PermissionKey,
   type RoleKey,
@@ -12,6 +13,20 @@ import {
 import { runWithBypass } from '../common/context/request-context';
 
 const CACHE_TTL = 60;
+
+/**
+ * Extended system roles seeded per tenant on top of the six ROLE_KEYS.
+ * Kept here (not in shared-types) because these role identifiers are DB rows,
+ * not runtime type constraints — the permission strings they reference all
+ * live in the shared PERMISSIONS catalog.
+ */
+const EXTENDED_ROLES: Array<{ key: string; label: string; bundle: readonly string[] }> = [
+  { key: 'transport_admin', label: 'Transport Admin', bundle: PERMISSION_BUNDLES.transportAdmin },
+  { key: 'finance_admin', label: 'Finance Admin', bundle: PERMISSION_BUNDLES.financeAdmin },
+  { key: 'hr_admin', label: 'HR Admin', bundle: PERMISSION_BUNDLES.hrAdmin },
+  { key: 'compliance_officer', label: 'Compliance Officer', bundle: PERMISSION_BUNDLES.complianceOfficer },
+  { key: 'dispatcher', label: 'Dispatcher', bundle: PERMISSION_BUNDLES.dispatcher },
+];
 
 @Injectable()
 export class RbacService {
@@ -61,7 +76,7 @@ export class RbacService {
    */
   async seedTenant(tenantId: string): Promise<void> {
     await runWithBypass(async () => {
-      for (const key of PERMISSION_KEYS) {
+      for (const key of PERMISSIONS) {
         await this.prisma.permission.upsert({
           where: { tenantId_key: { tenantId, key } },
           update: {},
@@ -104,12 +119,37 @@ export class RbacService {
           });
         }
       }
+
+      for (const { key, label, bundle } of EXTENDED_ROLES) {
+        const role = await this.prisma.role.upsert({
+          where: { tenantId_key: { tenantId, key } },
+          update: {},
+          create: { tenantId, key, label, isSystem: true },
+        });
+        for (const permKey of bundle) {
+          const permId = permByKey.get(permKey);
+          if (!permId) continue;
+          await this.prisma.rolePermission.upsert({
+            where: {
+              tenantId_roleId_permissionId: {
+                tenantId,
+                roleId: role.id,
+                permissionId: permId,
+              },
+            },
+            update: {},
+            create: { tenantId, roleId: role.id, permissionId: permId },
+          });
+        }
+      }
     });
   }
 
-  private describePermission(key: PermissionKey): string {
-    const [scope, verb] = key.split('.');
-    return `${verb ?? 'access'} ${scope?.replace(/_/g, ' ') ?? 'resource'}`;
+  private describePermission(key: string): string {
+    const parts = key.split('.');
+    const resource = parts[0]?.replace(/[_-]/g, ' ') ?? 'resource';
+    const action = parts.slice(1).join('.') || 'access';
+    return `${action} ${resource}`;
   }
 
   private describeRole(key: RoleKey): string {

@@ -11,6 +11,9 @@ coverage
 .env.*.local
 apps/api/prisma/generated
 apps/web/.vite
+apps/web/*.config.js
+apps/web/*.config.d.ts
+!apps/web/postcss.config.js
 apps/mobile/build
 apps/mobile/.dart_tool
 apps/mobile/.flutter-plugins

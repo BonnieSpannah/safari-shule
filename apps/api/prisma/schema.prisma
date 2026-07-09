@@ -209,6 +209,15 @@ model Tenant {
   mpesaTransactions   MpesaTransaction[]
   outboundMessages    OutboundMessage[]
 
+  // governance
+  doNotContact          DoNotContact[]
+  consents              Consent[]
+  dataSubjectRequests   DataSubjectRequest[]
+  retentionPolicies     RetentionPolicy[]
+  impersonationSessions ImpersonationSession[]
+  backupJobs            BackupJob[]
+  clientEvents          ClientEvent[]
+
   @@index([isActive])
   @@map("tenants")
 }
@@ -977,4 +986,284 @@ model OutboundMessage {
   @@index([tenantId, channel, status, createdAt(sort: Desc)])
   @@index([tenantId, templateId, createdAt(sort: Desc)])
   @@map("outbound_messages")
+}
+
+// =========================================================================
+// GOVERNANCE — DPA 2019, retention, DNC, impersonation, backups, client events
+// =========================================================================
+
+enum DncChannel {
+  sms
+  email
+  push
+  voice
+  all
+}
+
+enum DncReason {
+  user_request
+  regulatory
+  bounce
+  complaint
+  quiet_hours
+}
+
+model DoNotContact {
+  id            String     @id @default(uuid()) @db.Uuid
+  tenantId      String     @db.Uuid
+  channel       DncChannel
+  destination   String
+  reason        DncReason  @default(user_request)
+  note          String?
+  requestedBy   String?    @db.Uuid
+  effectiveFrom DateTime   @default(now())
+  effectiveTo   DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, channel, destination])
+  @@index([tenantId, destination])
+  @@index([tenantId, effectiveTo])
+  @@map("do_not_contact")
+}
+
+enum ConsentPurpose {
+  service_delivery
+  marketing
+  analytics
+  research
+  third_party_sharing
+  location_tracking
+  photo_video
+  emergency_contact
+}
+
+enum ConsentStatus {
+  granted
+  withdrawn
+  expired
+  pending
+}
+
+model Consent {
+  id             String         @id @default(uuid()) @db.Uuid
+  tenantId       String         @db.Uuid
+  subjectUserId  String?        @db.Uuid
+  subjectEmail   String?
+  subjectPhone   String?
+  purpose        ConsentPurpose
+  status         ConsentStatus  @default(granted)
+  legalBasis     String
+  version        String
+  grantedAt      DateTime       @default(now())
+  withdrawnAt    DateTime?
+  expiresAt      DateTime?
+  evidencePayload Json?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, subjectUserId, purpose, status])
+  @@index([tenantId, purpose, status])
+  @@map("consents")
+}
+
+enum DsrKind {
+  access
+  rectification
+  erasure
+  portability
+  objection
+  restrict_processing
+}
+
+enum DsrStatus {
+  received
+  in_progress
+  fulfilled
+  rejected
+  cancelled
+}
+
+model DataSubjectRequest {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @db.Uuid
+  subjectUserId  String?   @db.Uuid
+  subjectEmail   String?
+  subjectPhone   String?
+  kind           DsrKind
+  status         DsrStatus @default(received)
+  details        String?
+  handlerUserId  String?   @db.Uuid
+  dueBy          DateTime
+  fulfilledAt    DateTime?
+  rejectionReason String?
+  auditPayload   Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status, dueBy])
+  @@index([tenantId, subjectUserId])
+  @@map("data_subject_requests")
+}
+
+enum RetentionAction {
+  delete
+  anonymize
+  archive
+}
+
+model RetentionPolicy {
+  id           String          @id @default(uuid()) @db.Uuid
+  tenantId     String          @db.Uuid
+  resource     String
+  retainDays   Int
+  action       RetentionAction @default(anonymize)
+  legalHold    Boolean         @default(false)
+  isSystem     Boolean         @default(false)
+  description  String?
+  lastRunAt    DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, resource])
+  @@index([tenantId, legalHold])
+  @@map("retention_policies")
+}
+
+enum ImpersonationStatus {
+  pending_approval
+  active
+  ended
+  rejected
+  expired
+}
+
+model ImpersonationSession {
+  id             String              @id @default(uuid()) @db.Uuid
+  tenantId       String              @db.Uuid
+  supportUserId  String              @db.Uuid
+  targetUserId   String              @db.Uuid
+  approverUserId String?             @db.Uuid
+  reason         String
+  ticketRef      String?
+  status         ImpersonationStatus @default(pending_approval)
+  scope          Json?
+  startedAt      DateTime?
+  endedAt        DateTime?
+  expiresAt      DateTime
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status, expiresAt])
+  @@index([tenantId, supportUserId, createdAt(sort: Desc)])
+  @@index([tenantId, targetUserId, createdAt(sort: Desc)])
+  @@map("impersonation_sessions")
+}
+
+enum BackupKind {
+  logical_full
+  logical_incremental
+  physical_base
+  wal_archive
+  redis_snapshot
+  files
+}
+
+enum BackupTarget {
+  s3
+  gdrive
+  local
+  gcs
+  b2
+}
+
+enum BackupStatus {
+  scheduled
+  running
+  succeeded
+  failed
+  restored
+  expired
+  purged
+}
+
+model BackupJob {
+  id             String       @id @default(uuid()) @db.Uuid
+  tenantId       String?      @db.Uuid
+  kind           BackupKind
+  target         BackupTarget
+  status         BackupStatus @default(scheduled)
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  sizeBytes      BigInt?
+  checksumSha256 String?
+  location       String?
+  retentionDays  Int
+  encrypted      Boolean      @default(true)
+  encryptionKeyId String?
+  error          String?
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, kind, status, createdAt(sort: Desc)])
+  @@index([status, finishedAt])
+  @@map("backup_jobs")
+}
+
+enum ClientEventKind {
+  view
+  print
+  download
+  share
+  copy
+  screenshot_attempt
+  visibility_change
+  idle_start
+  idle_resume
+  geo_change
+  export_generated
+  bulk_action
+  role_switch
+  impersonation_start
+  impersonation_end
+}
+
+model ClientEvent {
+  id                 String           @id @default(uuid()) @db.Uuid
+  tenantId           String           @db.Uuid
+  userId             String?          @db.Uuid
+  sessionId          String?
+  kind               ClientEventKind
+  resource           String?
+  resourceId         String?
+  path               String?
+  traceId            String?
+  ipAddress          String?
+  userAgent          String?
+  deviceFingerprint  String?
+  geoHint            String?
+  payload            Json?
+  createdAt          DateTime         @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, kind, createdAt(sort: Desc)])
+  @@index([tenantId, userId, createdAt(sort: Desc)])
+  @@index([tenantId, resource, resourceId, createdAt(sort: Desc)])
+  @@map("client_events")
 }

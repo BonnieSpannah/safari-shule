@@ -23,6 +23,28 @@ export const appConfig = registerAs('app', () => ({
     senderId: process.env.AT_SENDER_ID ?? 'SAFARISHULE',
     dlrCallbackUrl: process.env.AT_DLR_CALLBACK_URL ?? '',
   },
+  twilio: {
+    accountSid: process.env.TWILIO_ACCOUNT_SID ?? '',
+    authToken: process.env.TWILIO_AUTH_TOKEN ?? '',
+    fromNumber: process.env.TWILIO_FROM_NUMBER ?? '',
+  },
+  infobip: {
+    baseUrl: process.env.INFOBIP_BASE_URL ?? '',
+    apiKey: process.env.INFOBIP_API_KEY ?? '',
+    senderId: process.env.INFOBIP_SENDER_ID ?? 'SAFARISHULE',
+  },
+  smsProvider: (process.env.SMS_PROVIDER ?? 'auto') as
+    | 'auto'
+    | 'africas_talking'
+    | 'twilio'
+    | 'infobip'
+    | 'mock',
+  mailProvider: (process.env.MAIL_PROVIDER ?? 'auto') as
+    | 'auto'
+    | 'mailhog'
+    | 'mailtrap'
+    | 'smtp'
+    | 'mock',
   mpesa: {
     env: (process.env.MPESA_ENV ?? 'sandbox') as 'sandbox' | 'production',
     consumerKey: process.env.MPESA_CONSUMER_KEY ?? '',

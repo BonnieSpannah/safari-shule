@@ -1,0 +1,117 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+
+    --background: 210 20% 98%;
+    --foreground: 240 10% 10%;
+
+    --surface: 210 20% 98%;
+    --surface-2: 0 0% 100%;
+    --surface-3: 240 5% 96%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 10%;
+
+    --border: 240 6% 90%;
+    --input: 240 6% 90%;
+    --ring: 152 76% 40%;
+
+    --primary: 152 76% 36%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 5% 96%;
+    --secondary-foreground: 240 10% 20%;
+
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 46%;
+
+    --accent: 38 92% 50%;
+    --accent-foreground: 240 10% 10%;
+
+    --danger: 350 78% 50%;
+    --danger-foreground: 0 0% 100%;
+
+    --success: 152 76% 36%;
+    --success-foreground: 0 0% 100%;
+
+    --info: 210 92% 45%;
+    --info-foreground: 0 0% 100%;
+  }
+
+  .dark {
+    --background: 240 10% 8%;
+    --foreground: 210 20% 96%;
+
+    --surface: 240 10% 8%;
+    --surface-2: 240 8% 12%;
+    --surface-3: 240 6% 16%;
+
+    --card: 240 8% 12%;
+    --card-foreground: 210 20% 96%;
+
+    --border: 240 6% 20%;
+    --input: 240 6% 20%;
+    --ring: 152 76% 45%;
+
+    --primary: 152 76% 42%;
+    --primary-foreground: 240 10% 8%;
+
+    --secondary: 240 6% 16%;
+    --secondary-foreground: 210 20% 96%;
+
+    --muted: 240 6% 16%;
+    --muted-foreground: 240 5% 65%;
+
+    --accent: 38 92% 55%;
+    --accent-foreground: 240 10% 8%;
+
+    --danger: 350 78% 55%;
+    --danger-foreground: 240 10% 8%;
+
+    --success: 152 76% 42%;
+    --success-foreground: 240 10% 8%;
+
+    --info: 210 92% 55%;
+    --info-foreground: 240 10% 8%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    @apply bg-primary/25 text-foreground;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}

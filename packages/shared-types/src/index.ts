@@ -1,5 +1,6 @@
 export * from './tenant';
 export * from './rbac';
+export * from './permissions';
 export * from './attributes';
 export * from './profiles';
 export * from './fleet';
