@@ -28,7 +28,7 @@ describe('RBAC permissions (e2e)', () => {
       .set('Authorization', `Bearer ${tenant.adminAccessToken}`)
       .set('x-tenant-id', tenant.tenantId)
       .send({
-        registration: 'KAA-PERM1',
+        registration: 'KCB 121X',
         make: 'Toyota',
         model: 'Coaster',
         year: 2022,
@@ -46,7 +46,7 @@ describe('RBAC permissions (e2e)', () => {
       .set('Authorization', `Bearer ${tenant.adminAccessToken}`)
       .set('x-tenant-id', tenant.tenantId)
       .send({
-        registration: 'KAA-PERM2',
+        registration: 'KCB 122X',
         make: 'Isuzu',
         model: 'NQR',
         year: 2021,

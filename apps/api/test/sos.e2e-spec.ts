@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { PrismaService } from '../src/common/prisma/prisma.service';
 import { TenantAdminService } from '../src/modules/tenant-admin/tenant-admin.service';
@@ -12,22 +13,62 @@ describe('SOS incident flow (e2e)', () => {
   let tenantAdmin: TenantAdminService;
   let auth: AuthService;
   let tenant: SeededTenant;
+  let tripId: string;
 
   beforeAll(async () => {
     ({ app, prisma, tenantAdmin, auth } = await bootstrapTestApp());
     tenant = await seedTenantWithRoles(prisma, tenantAdmin, auth, 'sos');
 
-    // Register at least one emergency contact so the SMS leg has somewhere to dispatch.
-    await runWithBypass(() =>
-      prisma.incidentEmergencyContact.create({
+    await runWithBypass(async () => {
+      await prisma.incidentEmergencyContact.create({
         data: {
           tenantId: tenant.tenantId,
-          label: 'Headteacher',
+          name: 'Headteacher',
+          role: 'headteacher',
           phoneE164: '+254712999000',
           priority: 1,
         },
-      }),
-    );
+      });
+
+      const vehicle = await prisma.vehicle.create({
+        data: {
+          tenantId: tenant.tenantId,
+          registration: 'KCB 909Z',
+          make: 'Toyota',
+          model: 'Coaster',
+          year: 2022,
+          capacity: 33,
+          ownership: 'school',
+          status: 'active',
+          odometerKm: 0,
+        },
+      });
+
+      const routeId = randomUUID();
+      await prisma.$executeRaw`
+        INSERT INTO routes (id, tenant_id, name, description, is_active, start_point, end_point, created_at, updated_at)
+        VALUES (
+          ${routeId}::uuid, ${tenant.tenantId}::uuid, 'SOS Route', 'sos test route', true,
+          ST_SetSRID(ST_MakePoint(36.8219, -1.2864), 4326)::geography,
+          ST_SetSRID(ST_MakePoint(36.83, -1.30), 4326)::geography,
+          NOW(), NOW()
+        );
+      `;
+
+      const trip = await prisma.trip.create({
+        data: {
+          tenantId: tenant.tenantId,
+          routeId,
+          vehicleId: vehicle.id,
+          driverUserId: tenant.driverUserId,
+          scheduledStart: new Date(),
+          direction: 'morning_pickup',
+          status: 'in_progress',
+          startedAt: new Date(),
+        },
+      });
+      tripId = trip.id;
+    });
   });
 
   afterAll(async () => {
@@ -37,7 +78,7 @@ describe('SOS incident flow (e2e)', () => {
 
   it('driver SOS returns 202 with per-leg statuses + persists an incident row', async () => {
     const res = await request(app.getHttpServer())
-      .post('/v1/incidents/sos')
+      .post(`/v1/trips/${tripId}/sos`)
       .set('Authorization', `Bearer ${tenant.driverAccessToken}`)
       .set('x-tenant-id', tenant.tenantId)
       .send({
@@ -46,10 +87,10 @@ describe('SOS incident flow (e2e)', () => {
       });
 
     expect([200, 201, 202]).toContain(res.status);
-    expect(res.body).toHaveProperty('legs');
-    expect(res.body.legs).toHaveProperty('persist');
-    expect(res.body.legs).toHaveProperty('broadcast');
-    expect(res.body.legs).toHaveProperty('sms');
+    expect(res.body).toHaveProperty('incident');
+    expect(res.body).toHaveProperty('broadcast');
+    expect(res.body).toHaveProperty('notifications');
+    expect(res.body.incident).toHaveProperty('ok');
 
     const incidents = await runWithBypass(() =>
       prisma.incident.findMany({
@@ -64,13 +105,12 @@ describe('SOS incident flow (e2e)', () => {
   });
 
   it('SOS without a registered emergency contact still persists the incident', async () => {
-    // Wipe contacts then try again.
     await runWithBypass(() =>
       prisma.incidentEmergencyContact.deleteMany({ where: { tenantId: tenant.tenantId } }),
     );
 
     const res = await request(app.getHttpServer())
-      .post('/v1/incidents/sos')
+      .post(`/v1/trips/${tripId}/sos`)
       .set('Authorization', `Bearer ${tenant.driverAccessToken}`)
       .set('x-tenant-id', tenant.tenantId)
       .send({
@@ -79,7 +119,6 @@ describe('SOS incident flow (e2e)', () => {
       });
 
     expect([200, 201, 202]).toContain(res.status);
-    // Persist leg should still succeed even when SMS leg has nothing to send.
-    expect(res.body?.legs?.persist).toMatch(/ok|fulfilled/i);
+    expect(res.body?.incident?.ok).toBe(true);
   });
 });

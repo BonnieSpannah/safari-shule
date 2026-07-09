@@ -11,8 +11,8 @@ const TENANT_OPTIONAL_PATHS = new Set([
   '/v1/auth/system/login',
   '/v1/integrations/mpesa/callback',
   '/v1/integrations/at/dlr',
-  '/api/v1/hardware/rfid-scan',
-  '/api/v1/hardware/gps',
+  '/v1/hardware/rfid-scan',
+  '/v1/hardware/gps',
 ]);
 
 @Injectable()
@@ -41,7 +41,7 @@ export class TenantMiddleware implements NestMiddleware {
       return next();
     }
 
-    if (TENANT_OPTIONAL_PATHS.has(req.path)) return next();
+    if (TENANT_OPTIONAL_PATHS.has(pathFor(req))) return next();
 
     throw new HttpException(
       {
@@ -51,4 +51,10 @@ export class TenantMiddleware implements NestMiddleware {
       HttpStatus.BAD_REQUEST,
     );
   }
+}
+
+function pathFor(req: Request): string {
+  const raw = req.originalUrl || req.url || '';
+  const q = raw.indexOf('?');
+  return q >= 0 ? raw.slice(0, q) : raw;
 }

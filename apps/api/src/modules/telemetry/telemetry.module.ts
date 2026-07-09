@@ -7,5 +7,6 @@ import { TelemetryFlushService } from './telemetry-flush.service';
 @Module({
   providers: [TelemetryService, TripGateway, TelemetryFlushService],
   controllers: [TelemetryController],
+  exports: [TripGateway, TelemetryService],
 })
 export class TelemetryModule {}

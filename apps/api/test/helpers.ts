@@ -8,6 +8,7 @@ import { TenantAdminService } from '../src/modules/tenant-admin/tenant-admin.ser
 import { AuthService } from '../src/auth/auth.service';
 import { runWithBypass } from '../src/common/context/request-context';
 import { encryptSecret, sha256 } from '../src/common/crypto/secret-encryption';
+import { RedisIoAdapter } from '../src/common/realtime/redis-io.adapter';
 
 export interface SeededTenant {
   tenantId: string;
@@ -35,6 +36,9 @@ export async function bootstrapTestApp(): Promise<{
   const app = moduleRef.createNestApplication({ logger: false });
   app.setGlobalPrefix('v1');
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
+  const ioAdapter = new RedisIoAdapter(app);
+  await ioAdapter.connectToRedis();
+  app.useWebSocketAdapter(ioAdapter);
   await app.init();
 
   const prisma = app.get(PrismaService);

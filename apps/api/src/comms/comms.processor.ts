@@ -4,8 +4,7 @@ import { Job } from 'bullmq';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { runWithBypass } from '../common/context/request-context';
 import { CommunicationsService } from './communications.service';
-import { COMMS_QUEUE } from './comms.module';
-import { SMS_PROVIDER, EMAIL_PROVIDER, type SmsProvider, type EmailProvider } from './tokens';
+import { COMMS_QUEUE, SMS_PROVIDER, EMAIL_PROVIDER, type SmsProvider, type EmailProvider } from './tokens';
 
 @Processor(COMMS_QUEUE, { concurrency: 8 })
 export class CommsProcessor extends WorkerHost {

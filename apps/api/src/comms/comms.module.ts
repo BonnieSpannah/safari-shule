@@ -3,18 +3,17 @@ import { ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { CommunicationsService } from './communications.service';
 import { CommsProcessor } from './comms.processor';
-import { SMS_PROVIDER, EMAIL_PROVIDER } from './tokens';
+import { COMMS_QUEUE, SMS_PROVIDER, EMAIL_PROVIDER } from './tokens';
 import { AfricasTalkingSmsProvider } from './sms/africas-talking.provider';
 import { MockSmsProvider } from './sms/mock-sms.provider';
 import { SmtpEmailProvider } from './email/smtp.provider';
 import { MockEmailProvider } from './email/mock-email.provider';
 import { renderTemplate } from './templates/registry';
-
-export const COMMS_QUEUE = 'comms';
+import { FeatureFlagsModule } from '../feature-flags/feature-flags.module';
 
 @Global()
 @Module({
-  imports: [BullModule.registerQueue({ name: COMMS_QUEUE })],
+  imports: [BullModule.registerQueue({ name: COMMS_QUEUE }), FeatureFlagsModule],
   providers: [
     CommunicationsService,
     CommsProcessor,

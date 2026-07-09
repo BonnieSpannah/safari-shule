@@ -4,12 +4,11 @@
   "testEnvironment": "node",
   "testRegex": ".e2e-spec\\.ts$",
   "transform": {
-    "^.+\\.(t|j)s$": ["ts-jest", { "tsconfig": "tsconfig.test.json" }]
+    "^.+\\.(t|j)s$": ["ts-jest", { "tsconfig": "<rootDir>/tsconfig.test.json" }]
   },
   "moduleNameMapper": {
     "^@app/(.*)$": "<rootDir>/../src/$1"
   },
-  "setupFilesAfterEach": [],
   "testTimeout": 30000,
   "maxWorkers": 1
 }

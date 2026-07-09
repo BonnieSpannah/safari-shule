@@ -9,8 +9,6 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
-import { createAdapter } from '@socket.io/redis-adapter';
-import { RedisService } from '../../common/redis/redis.service';
 
 interface SubscribePayload {
   tripId: string;
@@ -26,15 +24,7 @@ export class TripGateway implements OnGatewayConnection {
   @WebSocketServer()
   server!: Server;
 
-  constructor(private readonly jwt: JwtService, private readonly redis: RedisService) {}
-
-  afterInit() {
-    if (this.server) {
-      const pub = this.redis.client;
-      const sub = pub.duplicate();
-      this.server.adapter(createAdapter(pub, sub));
-    }
-  }
+  constructor(private readonly jwt: JwtService) {}
 
   async handleConnection(client: Socket) {
     try {

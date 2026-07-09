@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { COMMS_QUEUE } from './comms.module';
+import { COMMS_QUEUE } from './tokens';
 import { FeatureFlagService } from '../feature-flags/feature-flag.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { runWithBypass, getContext } from '../common/context/request-context';
