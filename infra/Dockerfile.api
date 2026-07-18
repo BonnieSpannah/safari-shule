@@ -3,9 +3,13 @@ WORKDIR /workspace
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY tsconfig.base.json ./
+# Copy EVERY workspace's package.json so --frozen-lockfile is honoured.
+# Missing any of these silently degrades to `pnpm install` which resolves
+# to newer transitive versions than the host — causes type-inference drift.
 COPY packages/shared-types/package.json ./packages/shared-types/
 COPY apps/api/package.json ./apps/api/
-RUN pnpm install --frozen-lockfile || pnpm install
+COPY apps/web/package.json ./apps/web/
+RUN pnpm install --frozen-lockfile
 
 FROM node:20-alpine AS build
 WORKDIR /workspace
@@ -13,6 +17,10 @@ RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 COPY --from=deps /workspace ./
 COPY packages/shared-types ./packages/shared-types
 COPY apps/api ./apps/api
+# Defensive cleanup — .dockerignore should prevent these from ever arriving,
+# but if a developer builds without it we must still emit a fresh dist.
+RUN find . -name '*.tsbuildinfo' -delete \
+ && rm -rf packages/shared-types/dist apps/api/dist
 RUN pnpm --filter @safari-shule/shared-types build \
  && pnpm --filter @safari-shule/api prisma generate \
  && pnpm --filter @safari-shule/api build

@@ -1,0 +1,58 @@
+# Never send these into any Docker build context. They cause cache-poisoning
+# and slow builds. Files still exist on the host; they're just not shipped
+# to the daemon.
+
+# Node
+node_modules
+**/node_modules
+
+# TypeScript build cache — the #1 cause of "silent no-op" Docker builds
+**/*.tsbuildinfo
+**/tsconfig.tsbuildinfo
+
+# Prior compile outputs — Docker builds these fresh
+apps/api/dist
+apps/web/dist
+packages/*/dist
+**/build
+
+# Vite / Next / turbo caches
+apps/web/.vite
+.turbo
+.next
+
+# Test artefacts
+coverage
+**/coverage
+**/*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor / VCS
+.git
+.github
+.vscode
+.idea
+*.swp
+
+# Environment (secrets never enter an image)
+.env
+.env.*
+!.env.example
+
+# Docs & other non-buildable trees
+docs
+bin
+infra/postgres/data
+infra/redis/data
+infra/grafana/data
+infra/prometheus/data
+infra/glitchtip/data
+
+# Flutter (not yet built)
+apps/mobile/build
+apps/mobile/.dart_tool
+apps/mobile/.flutter-plugins
+apps/mobile/.flutter-plugins-dependencies

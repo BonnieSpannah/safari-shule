@@ -85,7 +85,7 @@ run_spun() {
   local msg="$1"; shift
   [[ "$1" == "--" ]] && shift
   local logf; logf="$(mktemp)"
-  local i=0
+  local i=0 ec=0
   if [[ $TTY -eq 1 ]]; then
     ( "$@" >"$logf" 2>&1 ) &
     local pid=$!
@@ -95,17 +95,16 @@ run_spun() {
       i=$((i + 1))
       sleep 0.08
     done
-    wait "$pid"
-    local ec=$?
+    wait "$pid" || ec=$?
     if [[ $ec -eq 0 ]]; then
       printf "\r    ${EM}${G_OK}${R} %-70s\n" "$msg"
       rm -f "$logf"
       return 0
     else
       printf "\r    ${RO}${G_ERR}${R} %s\n" "$msg"
-      err "Command failed (exit $ec). Last 20 log lines:"
-      sed 's/^/      /' <(tail -n 20 "$logf") >&2
-      rm -f "$logf"
+      err "Command failed (exit $ec). Last 40 log lines:"
+      sed 's/^/      /' <(tail -n 40 "$logf") >&2
+      err "Full log kept at: $logf"
       return $ec
     fi
   else
@@ -142,12 +141,13 @@ ask_choice() {
 }
 
 ask_yn() {
-  local prompt=$1 default=$2 answer
+  local prompt=$1 default=$2 answer lower
   if [[ ! -t 0 ]]; then echo "$default"; return; fi
   printf "    ${AM}?${R} ${B}%s${R} ${D}${ZI}[%s]${R}: " "$prompt" "$default" >&2
   read -r answer
   answer=${answer:-$default}
-  case "${answer,,}" in y|yes|true|1) echo "yes";; *) echo "no";; esac
+  lower=$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')
+  case "$lower" in y|yes|true|1) echo "yes";; *) echo "no";; esac
 }
 
 # ------------- detect -------------
@@ -490,11 +490,26 @@ bring_up() {
     exit 1
   fi
 
-  local profiles=""
-  [[ "$CFG_METRICS" == "yes" ]] || profiles="$profiles --scale prometheus=0 --scale grafana=0 --scale glitchtip=0"
+  info "This takes 2–5 min the first time (pulling + building images)."
+  info "Output streams below so you can watch progress."
+  printf "\n"
 
-  run_spun "docker compose up (pulling + building)" -- \
-    docker compose -f infra/docker-compose.yml --env-file .env up -d --build
+  # Force plain build progress so it renders cleanly in a scripted terminal.
+  local ec=0
+  DOCKER_BUILDKIT=1 BUILDKIT_PROGRESS=plain \
+    docker compose -f infra/docker-compose.yml --env-file .env up -d --build 2>&1 \
+    | sed 's/^/      /' || ec=$?
+
+  if [[ $ec -ne 0 ]]; then
+    err "docker compose failed (exit $ec)."
+    err "Common causes:"
+    err "  • Port 5432 / 6379 / 3000 / 5173 already bound (lsof -i :<port>)"
+    err "  • Docker Desktop out of disk / RAM"
+    err "  • Dockerfile.api or Dockerfile.web build failure — scroll up for the cause"
+    err "Re-run ${U}make bootstrap${R} once fixed; it's idempotent."
+    exit $ec
+  fi
+  ok "docker compose services created"
 
   # Wait for healths (postgres + redis + api)
   local timeout=90 t=0

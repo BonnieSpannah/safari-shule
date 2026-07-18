@@ -3,9 +3,11 @@ WORKDIR /workspace
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY tsconfig.base.json ./
+# Copy EVERY workspace's package.json so --frozen-lockfile is honoured.
 COPY packages/shared-types/package.json ./packages/shared-types/
+COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
-RUN pnpm install --frozen-lockfile || pnpm install
+RUN pnpm install --frozen-lockfile
 
 FROM node:20-alpine AS dev
 WORKDIR /workspace
@@ -13,6 +15,11 @@ RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 COPY --from=deps /workspace ./
 COPY packages/shared-types ./packages/shared-types
 COPY apps/web ./apps/web
+# Defensive cleanup — the .dockerignore should already exclude these, but if
+# a developer builds without it, stale caches would poison the vite build.
+RUN find . -name '*.tsbuildinfo' -delete \
+ && rm -rf packages/shared-types/dist apps/web/dist apps/web/.vite
+RUN pnpm --filter @safari-shule/shared-types build
 WORKDIR /workspace/apps/web
 EXPOSE 5173
 CMD ["pnpm", "dev", "--host", "0.0.0.0"]

@@ -39,7 +39,7 @@ services:
   # PgBouncer (transaction-mode pooling)
   # ---------------------------------------------------------------
   pgbouncer:
-    image: edoburu/pgbouncer:1.23.1
+    image: edoburu/pgbouncer:latest
     container_name: safari-pgbouncer
     restart: unless-stopped
     environment:

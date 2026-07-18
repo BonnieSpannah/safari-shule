@@ -154,7 +154,7 @@ async function main(): Promise<void> {
       for (const r of ROUTES) {
         const routeId = randomUUID();
         await prisma.$executeRaw`
-          INSERT INTO routes (id, tenant_id, name, description, is_active, start_point, end_point, created_at, updated_at)
+          INSERT INTO routes (id, "tenantId", name, description, "isActive", "startPoint", "endPoint", "createdAt", "updatedAt")
           VALUES (
             ${routeId}::uuid, ${tenant.id}::uuid, ${r.name}, ${r.description}, true,
             ST_SetSRID(ST_MakePoint(${r.startPoint.lng}, ${r.startPoint.lat}), 4326)::geography,
@@ -167,7 +167,7 @@ async function main(): Promise<void> {
         for (const s of r.stops) {
           const stopId = randomUUID();
           await prisma.$executeRaw`
-            INSERT INTO bus_stops (id, tenant_id, route_id, name, pickup_order, scheduled_pickup_time, scheduled_dropoff_time, location)
+            INSERT INTO bus_stops (id, "tenantId", "routeId", name, "pickupOrder", "scheduledPickupTime", "scheduledDropoffTime", location)
             VALUES (
               ${stopId}::uuid, ${tenant.id}::uuid, ${routeId}::uuid, ${s.name}, ${s.order},
               ${s.pickup}, ${s.dropoff},
