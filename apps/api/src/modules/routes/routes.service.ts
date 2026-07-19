@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import type { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { requireTenantId } from '../../common/context/request-context';
 import type {
@@ -29,7 +30,7 @@ export class RoutesService {
   async createRoute(input: RouteInput) {
     const tenantId = requireTenantId();
     const routeId = randomUUID();
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: Parameters<Parameters<PrismaClient['$transaction']>[0]>[0]) => {
       await tx.$executeRaw`
         INSERT INTO routes
           (id, tenant_id, name, description, is_active, start_point, end_point, created_at, updated_at)

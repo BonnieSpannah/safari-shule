@@ -1,7 +1,8 @@
 import { Module, Global } from '@nestjs/common';
-import { JwtModule, JwtService } from '@nestjs/jwt';
+import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
+import { CommsModule } from '../comms/comms.module';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
@@ -18,6 +19,7 @@ import { JwtAuthGuard } from './jwt-auth.guard';
         signOptions: { expiresIn: config.get<string>('app.jwt.accessTtl') },
       }),
     }),
+    CommsModule,
   ],
   providers: [AuthService, JwtStrategy, JwtAuthGuard],
   controllers: [AuthController],

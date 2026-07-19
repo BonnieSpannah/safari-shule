@@ -104,7 +104,7 @@ Reviewed by two of: DPO, security lead, tech lead.
 
 ## 9. Vulnerability disclosure
 
-- `SECURITY.txt` at `/.well-known/security.txt` — `mailto:security@safari-shule.co.ke`.
+- `SECURITY.txt` at `/.well-known/security.txt` — `mailto:security@safarishule.co.ke`.
 - Response SLA: 48h acknowledgement, 14 days fix-or-mitigation plan.
 - Coordinated disclosure preferred; credit given if requested.
 

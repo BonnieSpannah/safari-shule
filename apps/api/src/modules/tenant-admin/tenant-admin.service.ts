@@ -11,8 +11,27 @@ export interface BootstrapTenantInput {
   subdomain: string;
   name: string;
   contactEmail: string;
+  contactPhone?: string;
   planTier: PlanTier;
-  initialAdmin: { email: string; fullName: string; phone?: string; password: string };
+  initialAdmin: {
+    email: string;
+    fullName: string;
+    phone?: string;
+    password: string;
+    /**
+     * Which system role to grant the initial admin. Defaults to `school_manager`
+     * (safe: no cross-tenant permissions). Only pass `system_admin` when
+     * bootstrapping the dedicated `platform` tenant.
+     */
+    roleKey?: string;
+    /**
+     * When true, the admin is forced to rotate their password on first login.
+     * Defaults to true — safe for admin-created accounts. The core seed
+     * passes false so the super admin can log in with the credentials the
+     * operator already knows.
+     */
+    mustChangePassword?: boolean;
+  };
 }
 
 @Injectable()
@@ -30,15 +49,53 @@ export class TenantAdminService {
     );
   }
 
+  updateTenant(
+    id: string,
+    input: { name?: string; contactEmail?: string; contactPhone?: string | null; planTier?: string },
+  ) {
+    return runWithBypass(() =>
+      this.prisma.tenant.update({
+        where: { id },
+        data: {
+          ...(input.name !== undefined && { name: input.name }),
+          ...(input.contactEmail !== undefined && { contactEmail: input.contactEmail }),
+          ...('contactPhone' in input && { contactPhone: input.contactPhone }),
+          ...(input.planTier !== undefined && { planTier: input.planTier as any }),
+        },
+      }),
+    );
+  }
+
+  setTenantStatus(id: string, status: 'active' | 'suspended' | 'deactivated' | 'deleted') {
+    const now = new Date();
+    const extra: Record<string, unknown> = {
+      active: { isActive: true, activatedAt: now, suspendedAt: null },
+      suspended: { isActive: false, suspendedAt: now },
+      deactivated: { isActive: false, suspendedAt: null },
+      deleted: { isActive: false, deletedAt: now },
+    };
+    return runWithBypass(() =>
+      this.prisma.tenant.update({
+        where: { id },
+        data: { status, ...(extra[status] ?? {}) },
+      }),
+    );
+  }
+
   createTenant(input: BootstrapTenantInput) {
     return runWithBypass(async () => {
+      const now = new Date();
       const tenant = await this.prisma.tenant.create({
         data: {
           slug: input.slug,
           subdomain: input.subdomain,
           name: input.name,
           contactEmail: input.contactEmail,
+          contactPhone: input.contactPhone ?? null,
           planTier: input.planTier as any,
+          status: 'active',
+          isActive: true,
+          activatedAt: now,
         },
       });
 
@@ -46,6 +103,7 @@ export class TenantAdminService {
       await this.flags.seedTenant(tenant.id, input.planTier);
 
       const passwordHash = await this.auth.hashPassword(input.initialAdmin.password);
+      const mustChangePassword = input.initialAdmin.mustChangePassword ?? true;
       const user = await this.prisma.user.create({
         data: {
           tenantId: tenant.id,
@@ -54,15 +112,45 @@ export class TenantAdminService {
           passwordHash,
           status: 'active',
           fullName: input.initialAdmin.fullName,
+          mustChangePassword,
+          passwordUpdatedAt: now,
+          activatedAt: now,
         },
       });
 
-      const schoolMgrRole = await this.prisma.role.findUniqueOrThrow({
-        where: { tenantId_key: { tenantId: tenant.id, key: 'school_manager' } },
+      // Record the initial password in history so a future rotation can't
+      // re-use it.
+      await this.prisma.passwordHistory.create({
+        data: {
+          tenantId: tenant.id,
+          userId: user.id,
+          passwordHash,
+          reason: 'initial',
+        },
+      });
+
+      const roleKey = input.initialAdmin.roleKey ?? 'school_manager';
+      const role = await this.prisma.role.findUniqueOrThrow({
+        where: { tenantId_key: { tenantId: tenant.id, key: roleKey } },
       });
       await this.prisma.userRole.create({
-        data: { tenantId: tenant.id, userId: user.id, roleId: schoolMgrRole.id },
+        data: { tenantId: tenant.id, userId: user.id, roleId: role.id },
       });
+
+      // Send activation email to all new users who are expected to set their
+      // own password on first login. The super admin (platform seed) is
+      // provisioned with mustChangePassword=false and a known password, so
+      // we skip the email for them.
+      if (mustChangePassword) {
+        await this.auth.issueActivationToken(
+          tenant.id,
+          user.id,
+          user.email,
+          user.fullName,
+          tenant.name,
+          tenant.slug,
+        );
+      }
 
       return { tenant, adminUser: { id: user.id, email: user.email } };
     });

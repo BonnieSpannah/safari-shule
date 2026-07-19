@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { ThrottlerException } from '@nestjs/throttler';
 import { Prisma } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { ZodError } from 'zod';
 import { ERROR_CODES, type ApiError } from '@safari-shule/shared-types';
 import { getContext } from '../context/request-context';
@@ -70,7 +71,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       };
     }
 
-    if (exception instanceof Prisma.PrismaClientKnownRequestError) {
+    if (exception instanceof PrismaClientKnownRequestError) {
       if (exception.code === 'P2002') {
         return {
           status: HttpStatus.CONFLICT,

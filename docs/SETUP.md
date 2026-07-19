@@ -2,193 +2,195 @@
 
 Everything a fresh engineer needs to run the platform locally.
 
-## TL;DR — one command
+## Fresh install — what you get
 
-```bash
-make preflight        # verify prerequisites (no changes)
-make bootstrap        # animated installer — asks a few questions, then does everything
-```
+After running the steps below, your local install has **exactly**:
 
-The bootstrap script ([bin/bootstrap.sh](../bin/bootstrap.sh)):
+- Every permission in the catalog (~250, [full list here](../packages/shared-types/src/permissions.ts))
+- Every system role (`system_admin`, `school_manager`, `driver`, `assistant`, `parent`, `caretaker`) plus extended roles (`transport_admin`, `finance_admin`, `hr_admin`, `compliance_officer`, `dispatcher`) with their default permission bundles
+- **One super admin user** in the technical `platform` tenant
 
-- Detects your OS (macOS / Linux / WSL) and prerequisites.
-- Prompts for **environment** (dev / uat / prod-preview), **base domain**, **email + SMS provider**, **integrations mode**, **log level**, and whether to enable observability + queue dashboard + seed. Enter accepts the recommended default for each.
-- Generates all secrets (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `DATA_ENCRYPTION_KEY`, `POSTGRES_PASSWORD`) with cryptographic RNG.
-- On macOS + [Laravel Herd](https://herd.laravel.com): symlinks `~/Herd/safari-shule → this repo` and runs `herd secure` for `*.<your-domain>` HTTPS.
-- Renders `infra/nginx.conf` from `infra/nginx.conf.template` using your chosen base domain (drives API, web, and tenant subdomain routing).
-- Runs `pnpm install`, `docker compose up -d`, waits for healthchecks, `prisma migrate deploy`, and (for dev) `pnpm db:seed`.
-- Prints URLs + demo credentials + RFID device secrets.
+That's it. No schools, no demo students, no vehicles. From the web UI as super admin you'll create your first school (tenant), invite its admin, and so on. Every action is auditable and role-scoped.
 
-Re-running is safe (idempotent). Existing `.env` is preserved unless you explicitly overwrite; `nginx.conf` is regenerated each run.
+## Fresh install — step by step
 
-## Manual setup (if you prefer)
-
-## 1. Prerequisites
+### 1. Prerequisites
 
 | Tool | Version | Install |
 |---|---|---|
-| macOS / Linux | any recent | — |
 | Homebrew (macOS) | latest | https://brew.sh |
 | Git | 2.40+ | `brew install git` |
 | Node.js | **20.11.0** | `brew install nvm && nvm install` (auto-picks `.nvmrc`) |
 | pnpm | 9.x | `corepack enable && corepack prepare pnpm@latest --activate` |
 | Docker Desktop | 4.30+ | https://docker.com/products/docker-desktop |
-| GitHub CLI | 2.55+ | `brew install gh` |
-| Laravel Herd *(optional)* | latest | https://herd.laravel.com — for `*.safari-shule.test` domains + TLS |
 
 Verify:
 
 ```bash
-node --version    # v20.11.0
-pnpm --version    # 9.x
-docker --version  # 4.30+
-docker compose version
+node --version && pnpm --version && docker --version
 ```
 
-## 2. Clone and install
+### 2. Clone and install
 
 ```bash
 git clone git@github.com:BonnieSpannah/safari-shule.git
 cd safari-shule
-nvm use          # switches to 20.11.0
-corepack enable
 pnpm install
 ```
 
-## 3. Environment
+### 3. Configure your environment
 
 ```bash
 cp .env.example .env
 ```
 
-At minimum, set these three keys in `.env` before first boot:
+Open `.env` in your editor. **Change these if you want non-defaults; otherwise, defaults work out of the box for local:**
 
-```bash
-JWT_ACCESS_SECRET=<32+ random chars>
-JWT_REFRESH_SECRET=<32+ random chars, different from access>
-DATA_ENCRYPTION_KEY=<64 hex chars = 32 bytes for AES-256-GCM>
-```
-
-Generate them quickly:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"  # JWT secrets
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"        # DATA_ENCRYPTION_KEY
-```
-
-Leave `INTEGRATIONS_MODE=mock` for local — it short-circuits Africa's Talking and M-Pesa. Never commit `.env`.
-
-Full variable reference: [Environment variables](#environment-variables) below.
-
-## 4. Bring up stateful services
-
-```bash
-make up          # postgres · pgbouncer · redis · mailhog · prometheus · grafana · glitchtip · api · web · nginx
-make ps          # confirm every service is (healthy) or (running)
-```
-
-First boot pulls images (~2–5 min). After that:
-
-```bash
-make migrate     # apply Prisma migrations
-make seed        # create Hillcrest demo tenant + users + RFID device
-```
-
-The seed prints demo credentials and a **one-time** RFID device `apiKey` + `hmacSecret` — copy them for hardware demos.
-
-## 5. Run the apps in dev mode
-
-You have two options.
-
-### Option A — everything in Docker (matches CI)
-
-```bash
-make up          # already includes api + web
-open http://localhost:3000/docs   # API Swagger
-open http://localhost:5173        # Web admin
-```
-
-### Option B — host-mode dev (fast HMR, recommended for daily work)
-
-Keep only stateful services in compose; run api + web on the host.
-
-```bash
-# in one terminal — stateful services only
-docker compose -f infra/docker-compose.yml up -d postgres pgbouncer redis mailhog prometheus grafana
-
-# in another terminal — everything
-pnpm dev         # runs @safari-shule/api and @safari-shule/web in parallel
-```
-
-## 6. Demo credentials
-
-After `make seed`:
-
-| Role | Email | Password |
+| Key | Default | Purpose |
 |---|---|---|
-| System admin | `admin@hillcrest.ac.ke` | `Demo!Password1` |
-| Driver A / B, Assistant, Parent, Caretaker | see seed output | `Demo!Password1` |
+| `APP_BASE_DOMAIN` | `safarishule.test` | Base domain. Drives default super-admin email + tenant subdomain routing. |
+| `WEB_PUBLIC_URL` | `http://localhost:5173` | Where users open the app. |
+| `API_PUBLIC_URL` | `http://localhost:3000` | Where the API listens. |
+| `SUPER_ADMIN_FULL_NAME` | `Safari Shule Super Admin` | Full name for your bootstrap user. |
+| `SUPER_ADMIN_EMAIL` | `admin@safarishule.test` | Login email for your bootstrap user. Use anything you like. |
+| `SUPER_ADMIN_PHONE` | `+254700000000` | For SMS notifications. |
+| `SUPER_ADMIN_PASSWORD` | `ChangeMe!Now1` | **Change this before seeding**, or after first login via Profile → Security. |
 
-Tenant slug `hillcrest` · Subdomain `hillcrest.safari-shule.test`.
+Full env-var reference (Postgres, Redis, JWT, provider secrets, observability, hardware, mail, SMS, M-Pesa) is documented **in [.env.example](../.env.example) itself**, with comments explaining every value.
 
-## 7. Local domains with Laravel Herd (optional but recommended)
+#### How the four env files fit together
+
+Safari Shule uses four env files, split by security scope:
+
+| File | Committed? | Read by | Contains |
+|---|---|---|---|
+| `.env.example` (root) | ✅ | (template only) | Every server-side variable, with defaults and comments. |
+| `.env` (root) | ❌ gitignored | NestJS API · Prisma · docker-compose · seed | Your **server secrets** (Postgres password, JWT secrets, provider keys, super admin bootstrap). Never reaches the browser. |
+| `apps/web/.env.example` | ✅ | (template only) | Every `VITE_*` browser-bundle variable. |
+| `apps/web/.env.local` | ❌ gitignored | Vite (build) | Your **browser-bundle overrides** — API URL, tenant hint, map tiles. Only `VITE_*` prefixed vars are exposed to the browser. |
+
+**Why two `.env` files?** Vite's rule: only variables prefixed `VITE_` land in the JS bundle downloaded by end users. Everything else stays server-side. This is how we guarantee secrets like `MPESA_CONSUMER_SECRET` or `JWT_ACCESS_SECRET` never leak into browser code.
+
+**Do I need `.env.local` for the web?** Only if you want to override defaults. If Vite finds no `apps/web/.env.local`, it uses the fallbacks in `apps/web/src/lib/env.ts` — which read from `VITE_*` env vars if set, otherwise use sensible defaults. Copy `apps/web/.env.example` to `apps/web/.env.local` if you want per-machine overrides.
+
+### 4. Bring up stateful services
+
+Only Postgres + Redis + Mailhog. The API and web run on your host in dev mode (much faster HMR than Docker).
 
 ```bash
-ln -s ~/Projects/me/safari-shule ~/Herd/safari-shule
-herd secure safari-shule
+docker compose -f infra/docker-compose.yml --env-file .env up -d postgres redis mailhog
 ```
 
-Then `*.safari-shule.test` resolves over HTTPS. Map:
+Wait ~10s for Postgres to be healthy, then verify:
 
-| Host | Points to |
+```bash
+docker compose -f infra/docker-compose.yml --env-file .env ps
+```
+
+You should see `safari-postgres` and `safari-redis` as **healthy**, `safari-mailhog` as **running**.
+
+### 5. Load .env into your shell
+
+Prisma reads `DATABASE_URL` from the shell environment. Load it once:
+
+```bash
+set -a && source .env && set +a
+```
+
+Do this in every new terminal where you'll run `prisma` or `pnpm db:seed`.
+
+### 6. Apply the schema
+
+```bash
+pnpm --filter @safari-shule/api exec prisma migrate deploy
+```
+
+Creates every table + Postgres RLS policies.
+
+### 7. Seed core data (roles + permissions + super admin)
+
+```bash
+pnpm --filter @safari-shule/api run db:seed
+```
+
+You'll see:
+
+```
+[seed] Creating platform tenant + super admin...
+[seed]  → all permissions upserted
+[seed]  → 11 system roles seeded
+[seed]  → 1 super admin user assigned system_admin role
+[seed] =========================================================
+[seed]  Core seed complete.
+[seed]  Super admin credentials:
+[seed]    URL      : http://localhost:5173
+[seed]    Email    : admin@safarishule.test
+[seed]    Password : ChangeMe!Now1
+[seed]    Tenant   : platform  (sent as X-Tenant-Slug header)
+[seed] =========================================================
+```
+
+### 8. Start api + web
+
+```bash
+pnpm dev
+```
+
+Two processes run in parallel: NestJS API on `:3000`, Vite web on `:5173`.
+
+Wait for:
+
+```
+apps/api dev: [Nest] ... LOG Safari Shule API listening on :3000
+apps/web dev: VITE v5.4.8  ready ... Local: http://localhost:5173/
+```
+
+### 9. Log in
+
+Open **http://localhost:5173** in your browser. Log in with the super admin credentials from step 7's output.
+
+**First things a super admin does:**
+
+1. Change password → Profile → Security
+2. Create a school → Platform → Tenants → New tenant
+3. Invite the school's admin → Settings → Users → Invite
+
+## Where things live
+
+| URL | What |
 |---|---|
-| `safari-shule.test` | Web admin |
-| `api.safari-shule.test` | Nest API |
-| `hillcrest.safari-shule.test` | Tenant subdomain |
-| `mailhog.safari-shule.test` | Mailhog UI (8025) |
-| `grafana.safari-shule.test` | Grafana (3001) |
-| `prometheus.safari-shule.test` | Prometheus (9090) |
-| `glitchtip.safari-shule.test` | GlitchTip (8001) |
+| http://localhost:5173 | Web console |
+| http://localhost:3000 | API |
+| http://localhost:3000/docs | Swagger — every endpoint documented |
+| http://localhost:8025 | Mailhog — inbox for every outbound email |
 
-## 8. Common commands
+## Common commands
 
 ```bash
-make up                                              # start the stack
-make down                                            # stop (preserves volumes)
-make logs                                            # tail all services
-make reset                                           # ⚠ DESTRUCTIVE — drop DB + reseed
-make db-shell                                        # psql into postgres
-make redis-shell                                     # redis-cli
+# Full reset — wipe DB, re-migrate, re-seed
+pnpm --filter @safari-shule/api exec prisma migrate reset --force --skip-seed
+pnpm --filter @safari-shule/api run db:seed
 
-pnpm dev                                             # api + web parallel
-pnpm --filter @safari-shule/api run build            # nest build
-pnpm --filter @safari-shule/api run test             # api unit + integration
-pnpm --filter @safari-shule/api run test:e2e         # api e2e
-pnpm --filter @safari-shule/web run dev              # vite dev server
-pnpm --filter @safari-shule/web run test             # vitest
-pnpm --filter @safari-shule/web run build            # production bundle
-pnpm --filter @safari-shule/api exec prisma studio   # DB browser at :5555
+# API in isolation
+pnpm --filter @safari-shule/api run dev
+
+# Web in isolation
+pnpm --filter @safari-shule/web run dev
+
+# Test
+pnpm --filter @safari-shule/api run test
+pnpm --filter @safari-shule/web run test
+
+# Peek at DB
+docker compose -f infra/docker-compose.yml --env-file .env exec postgres psql -U safari -d safari_shule
 ```
 
-## Environment variables
+## Pretty domain (`https://safarishule.test`) — optional
 
-Full template: [.env.example](../.env.example). Grouped essentials:
+If you want to use `https://safarishule.test` instead of `http://localhost:5173`:
 
-| Group | Keys | Purpose |
-|---|---|---|
-| Runtime | `NODE_ENV`, `API_PORT`, `WEB_PORT`, `APP_BASE_DOMAIN`, `INTEGRATIONS_MODE` | Runtime toggles |
-| Postgres | `POSTGRES_USER/PASSWORD/DB/HOST/PORT`, `DIRECT_URL`, `DATABASE_URL` | `DIRECT_URL` for migrate, `DATABASE_URL` via PgBouncer |
-| Redis | `REDIS_HOST`, `REDIS_PORT`, `REDIS_URL` | Cache / queue / GEO / pub-sub |
-| Auth | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL` | JWT signing |
-| Africa's Talking | `AT_USERNAME`, `AT_API_KEY`, `AT_SENDER_ID`, `AT_DLR_CALLBACK_URL` | SMS (mock in dev) |
-| M-Pesa Daraja | `MPESA_ENV`, `MPESA_CONSUMER_KEY`, `MPESA_CONSUMER_SECRET`, `MPESA_SHORTCODE`, `MPESA_PASSKEY`, `MPESA_CALLBACK_URL` | Payments (mock in dev) |
-| SMTP | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Email → Mailhog locally |
-| Observability | `SENTRY_DSN_API`, `SENTRY_DSN_WEB`, `SENTRY_ENVIRONMENT`, `LOG_LEVEL` | Blank DSN = disabled |
-| Hardware | `HARDWARE_HMAC_REPLAY_WINDOW_SECONDS`, `HARDWARE_THROTTLE_PER_MINUTE` | RFID/GPS ingest |
-| Crypto | `DATA_ENCRYPTION_KEY` | AES-256-GCM for device secrets (32 bytes hex) |
+- **On macOS with Laravel Herd**: Herd's dnsmasq already resolves `*.test` to 127.0.0.1. You still need something on port 80 to proxy → web:5173. Herd standard only serves PHP, so either upgrade to Herd Pro (has proxy) or run our docker nginx and disable Herd on port 80.
+- **Any OS**: add `127.0.0.1 safarishule.test api.safarishule.test` to `/etc/hosts`, then run the docker nginx (`docker compose up -d nginx`) which proxies port 80 to web/api by hostname.
 
-## Next
+Either way, `http://localhost:5173` works today without any of that setup. The pretty domain is a nice-to-have; not required to demo, develop, or ship.
 
-- Take the guided tour: [RUNBOOK.md](RUNBOOK.md)
-- Read the shape of the code: [ARCHITECTURE.md](ARCHITECTURE.md)
-- Contribute: [CONTRIBUTING.md](CONTRIBUTING.md)

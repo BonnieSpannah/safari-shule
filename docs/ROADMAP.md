@@ -53,7 +53,7 @@ Sequenced milestones from now to production-ready SaaS ERP for Kenyan schools. E
 - 13 GitHub Actions workflows (see [DEVSECOPS.md](DEVSECOPS.md) §1)
 - Branch protection scripted via `gh api`
 - CODEOWNERS
-- Herd wiring for `*.safari-shule.test` with mkcert TLS
+- Herd wiring for `*.safarishule.test` with mkcert TLS
 - Release-please + Conventional Commits + auto-changelog
 - Cosign + syft SBOM + trivy image scan in build pipeline
 
@@ -149,7 +149,7 @@ We are deliberately **not** doing:
 |---|---|---|
 | 2026-06-30 | GitLab Flow + Conventional Commits + squash-into-main | Team |
 | 2026-06-30 | All stateful services in Docker always | Team |
-| 2026-06-30 | Herd for local TLS on `*.safari-shule.test` | Team |
+| 2026-06-30 | Herd for local TLS on `*.safarishule.test` | Team |
 | 2026-07-09 | Vite + React + Tailwind + Savanna design system for web | Team |
 | 2026-07-09 | 250+ permission atomic catalog with specialist roles | Team |
 | 2026-07-09 | Provider abstractions for SMS + email; M-Pesa remains sole payments | Team |

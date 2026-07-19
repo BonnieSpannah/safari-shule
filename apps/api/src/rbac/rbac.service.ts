@@ -102,7 +102,14 @@ export class RbacService {
           },
         });
 
-        const defaults = DEFAULT_ROLE_PERMISSIONS[roleKey];
+        // system_admin gets the FULL catalog (every permission in PERMISSIONS),
+        // not just the legacy DEFAULT_ROLE_PERMISSIONS.system_admin subset.
+        // That guarantees a super admin can access every capability the app
+        // will ever expose without a per-permission grant dance.
+        const defaults =
+          roleKey === 'system_admin'
+            ? (PERMISSIONS as unknown as readonly PermissionKey[])
+            : DEFAULT_ROLE_PERMISSIONS[roleKey];
         for (const permKey of defaults) {
           const permId = permByKey.get(permKey);
           if (!permId) continue;

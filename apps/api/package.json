@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "description": "Safari Shule API — multi-tenant school transport platform backend.",
-  "main": "dist/main.js",
+  "main": "dist/src/main.js",
   "scripts": {
     "build": "nest build",
-    "start": "node dist/main.js",
+    "start": "node dist/src/main.js",
     "dev": "nest start --watch",
     "lint": "eslint \"src/**/*.ts\" --max-warnings 0",
     "test": "jest --runInBand --forceExit",
@@ -14,7 +14,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
-    "db:seed": "ts-node --transpile-only prisma/seed.ts"
+    "db:seed": "node --env-file=../../.env dist/prisma/seed.js"
   },
   "dependencies": {
     "@bull-board/api": "5.21.7",

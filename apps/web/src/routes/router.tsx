@@ -1,15 +1,35 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from './ProtectedRoute';
+import { PermissionGate } from '@/components/auth/PermissionGate';
 import { LoginPage } from './LoginPage';
+import { ForgotPasswordPage } from './ForgotPasswordPage';
+import { ResetPasswordPage } from './ResetPasswordPage';
+import { ActivatePage } from './ActivatePage';
 import { DashboardPage } from './DashboardPage';
 import { PlaceholderPage } from './PlaceholderPage';
 import { NotFoundPage } from './NotFoundPage';
+import { TenantsPage } from './platform/TenantsPage';
+import { ProfilePage } from './me/ProfilePage';
+import { SecurityPage } from './me/SecurityPage';
+import { PreferencesPage } from './me/PreferencesPage';
 
 export const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/forgot-password',
+    element: <ForgotPasswordPage />,
+  },
+  {
+    path: '/reset-password/:token',
+    element: <ResetPasswordPage />,
+  },
+  {
+    path: '/activate/:token',
+    element: <ActivatePage />,
   },
   {
     path: '/',
@@ -91,6 +111,29 @@ export const router = createBrowserRouter([
           />
         ),
       },
+      {
+        path: 'audit',
+        element: (
+          <PlaceholderPage
+            title="Audit log"
+            description="Every mutation, sign-in, and sensitive read across your tenant — immutable, timestamped."
+            eta="Audit browser ships in M3."
+          />
+        ),
+      },
+      {
+        path: 'platform/tenants',
+        element: (
+          <PermissionGate anyOf={['tenants.manage']}>
+            <TenantsPage />
+          </PermissionGate>
+        ),
+      },
+      // ─── Self-service ("me") pages — every signed-in user reaches these
+      //     from the topbar avatar menu, regardless of role.
+      { path: 'me/profile', element: <ProfilePage /> },
+      { path: 'me/security', element: <SecurityPage /> },
+      { path: 'me/preferences', element: <PreferencesPage /> },
     ],
   },
   {

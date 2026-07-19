@@ -128,7 +128,11 @@ services:
     container_name: safari-web
     restart: unless-stopped
     environment:
-      VITE_API_URL: http://localhost:${API_PORT}
+      VITE_API_PROXY_TARGET: http://safari-api:3000
+    volumes:
+      # Mount only the source tree so Vite HMR works without rebuilding the image.
+      # node_modules stay inside the container (installed at image build time).
+      - ../apps/web/src:/workspace/apps/web/src:cached
     ports:
       - "${WEB_PORT}:5173"
     depends_on:
@@ -143,7 +147,7 @@ services:
     container_name: safari-nginx
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "${NGINX_PORT:-8080}:80"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
@@ -203,7 +207,7 @@ services:
       PORT: "8000"
       EMAIL_URL: smtp://mailhog:1025
       GLITCHTIP_DOMAIN: http://localhost:8001
-      DEFAULT_FROM_EMAIL: glitchtip@safarishule.local
+      DEFAULT_FROM_EMAIL: glitchtip@safarishule.test
       CELERY_WORKER_AUTOSCALE: "1,3"
     ports:
       - "8001:8000"

@@ -116,7 +116,7 @@ Everything in Scale, plus:
 - **Multi-country** support (for regional chains)
 - **Quarterly on-site** engineering review
 
-Book a call: `enterprise@safari-shule.co.ke`
+Book a call: `enterprise@safarishule.co.ke`
 
 ---
 
@@ -229,8 +229,8 @@ For context: the average Kenyan urban private school charges KES 8,000–35,000 
 ## Get started
 
 - **Try free for 30 days** — no card required · book a call · we set up your tenant in an hour
-- **Talk to sales** — `sales@safari-shule.co.ke` · `+254 700 000 000`
-- **Government / county** — `partnerships@safari-shule.co.ke`
-- **Existing customer** — `support@safari-shule.co.ke`
+- **Talk to sales** — `sales@safarishule.co.ke` · `+254 700 000 000`
+- **Government / county** — `partnerships@safarishule.co.ke`
+- **Existing customer** — `support@safarishule.co.ke`
 
 *Prices subject to change with 90 days' notice. Existing customers grandfathered for 12 months on any price increase.*

@@ -1,3 +1,4 @@
+import type { UserPreferences } from '@safari-shule/shared-types';
 import { api } from './client';
 
 export interface AuthUser {
@@ -5,8 +6,17 @@ export interface AuthUser {
   tenantId: string;
   email: string;
   fullName: string;
+  phoneE164?: string | null;
+  status?: string;
+  mustChangePassword?: boolean;
+  passwordUpdatedAt?: string;
+  passwordExpiresAt?: string;
+  passwordExpiresInDays?: number;
+  activatedAt?: string | null;
+  lastLoginAt?: string | null;
   roles?: string[];
   permissions?: string[];
+  preferences?: UserPreferences;
 }
 
 export interface LoginResponse {
@@ -30,3 +40,13 @@ export async function logout(refreshToken: string): Promise<void> {
     // best-effort — local state is cleared regardless
   }
 }
+
+/**
+ * Fetch the caller's full identity (roles + permissions). Used by the web to
+ * hydrate permission-gated navigation right after login.
+ */
+export async function fetchMe(): Promise<AuthUser> {
+  const { data } = await api.get<AuthUser>('/v1/auth/me');
+  return data;
+}
+

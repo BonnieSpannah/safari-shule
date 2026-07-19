@@ -122,9 +122,9 @@ See [PRICING.md](PRICING.md). Starter tier is KES 4,900/month; annual billing ge
 
 **Contact us**
 
-- Email: `hello@safari-shule.co.ke`
+- Email: `hello@safarishule.co.ke`
 - Phone / WhatsApp: `+254 700 000 000`
-- Book a demo: `https://safari-shule.co.ke/demo`
+- Book a demo: `https://safarishule.co.ke/demo`
 
 ---
 

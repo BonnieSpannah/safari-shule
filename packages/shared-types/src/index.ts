@@ -11,3 +11,4 @@ export * from './notifications';
 export * from './pagination';
 export * from './errors';
 export * from './api-extras';
+export * from './identity';

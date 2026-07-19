@@ -170,9 +170,9 @@ We are open to:
 
 ## Contact
 
-- **Government partnerships:** `partnerships@safari-shule.co.ke`
+- **Government partnerships:** `partnerships@safarishule.co.ke`
 - **Direct line:** *(inserted after registration)*
-- **Book a briefing:** `https://safari-shule.co.ke/gov`
+- **Book a briefing:** `https://safarishule.co.ke/gov`
 
 We welcome inbound interest from any Kenyan ministry, agency, county government, or accredited civil-society organization working on child welfare, school administration, or transport safety.
 

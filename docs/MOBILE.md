@@ -16,7 +16,7 @@
 |---|---|---|
 | **Android** | Driver + Assistant + Parent | Google Play (production track), APK sideload for pilot schools |
 | **iOS** | Parent (largely) | App Store — TestFlight for pilots |
-| **Web (PWA)** | Parents on feature-phone-adjacent handsets or without app-install permission | Vercel / Cloudflare Pages under `m.safari-shule.co.ke` |
+| **Web (PWA)** | Parents on feature-phone-adjacent handsets or without app-install permission | Vercel / Cloudflare Pages under `m.safarishule.co.ke` |
 | **macOS** | Ops console **companion** (not a replacement for the web admin) | Notarized DMG via GitHub Releases |
 | **Windows** | Same as macOS — school office desktop use | Signed MSIX via winget |
 | **Linux** | Same, for tech-forward schools | AppImage + Snap |
@@ -192,7 +192,7 @@ Workflows:
 | `mobile-ci.yml` | PR + push main | analyze, format, unit + widget + golden tests, coverage |
 | `mobile-build-android.yml` | push main → tag | signed AAB + APK, uploaded to Firebase App Distribution (internal), Play Store (production track) |
 | `mobile-build-ios.yml` | push main → tag | signed IPA, uploaded to TestFlight (internal) + App Store Connect (production) |
-| `mobile-build-web.yml` | push main | PWA build → Cloudflare Pages (`m.safari-shule.co.ke`) |
+| `mobile-build-web.yml` | push main | PWA build → Cloudflare Pages (`m.safarishule.co.ke`) |
 | `mobile-build-desktop.yml` | on tag | signed macOS DMG, signed Windows MSIX, AppImage — attached to GitHub Release |
 
 Signing keys in GitHub Environments; only usable from the tagged workflow.

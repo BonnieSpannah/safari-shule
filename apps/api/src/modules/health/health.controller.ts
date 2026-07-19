@@ -34,7 +34,7 @@ export class HealthController {
   @HealthCheck()
   async ready() {
     return this.health.check([
-      () => this.prismaHealth.pingCheck('database', this.prisma),
+      () => this.prismaHealth.pingCheck('database', this.prisma as any),
       async () => this.pingRedis(),
     ]);
   }

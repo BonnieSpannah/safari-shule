@@ -39,6 +39,7 @@ Thumbs.db
 
 # Environment (secrets never enter an image)
 .env
+.env.bak
 .env.*
 !.env.example
 

@@ -2,6 +2,16 @@
 
 Step-by-step recipes for running, demoing, operating, and troubleshooting the platform.
 
+## Defaults & customization
+
+Every URL, email, and password used in this runbook is a **default** from `.env`. If you changed any of them during install:
+
+- URL / port defaults: `WEB_PUBLIC_URL`, `API_PUBLIC_URL`, `APP_BASE_DOMAIN` — see [.env.example](../.env.example)
+- Super admin login: `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`
+- Fresh install steps: [SETUP.md](SETUP.md)
+
+Substitute your own values wherever you see `http://localhost:5173`, `admin@safarishule.test`, `hillcrest`, etc. below.
+
 ## Contents
 
 1. [End-to-end demo (fresh install → live SOS)](#1-end-to-end-demo)
@@ -20,53 +30,80 @@ Step-by-step recipes for running, demoing, operating, and troubleshooting the pl
 
 The full "showcase this to someone" flow. Assumes a fresh clone.
 
+**Fresh install produces**: platform tenant + 1 super admin (`admin@safarishule.test` / `ChangeMe!Now1` by default). No schools. This walkthrough creates a school called `hillcrest` and exercises the whole stack against it.
+
 ### Terminal layout
 
-- **T1** — the stack (`make up` / `make logs`)
+- **T1** — the stack (`docker compose ... up -d`)
 - **T2** — demo commands (curl / node)
 - **T3** — peeking (psql / redis-cli)
 
-### Act 1 — Boot
+### Act 1 — Boot the stack + seed core
 
-```bash
-cd ~/Projects/me/safari-shule
-nvm use
-[[ -f .env ]] || cp .env.example .env
-# ensure JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, DATA_ENCRYPTION_KEY are set
-make up
-make ps    # confirm all services healthy / running
-```
+Follow [SETUP.md](SETUP.md) steps 1–8 (install, `.env`, `docker compose up postgres redis mailhog`, `prisma migrate deploy`, `pnpm db:seed`, `pnpm dev`).
 
-### Act 2 — Migrate + seed
+At the end you have:
+- API on `http://localhost:3000`
+- Web on `http://localhost:5173`
+- Super admin credentials printed by the seed (defaults: `admin@safarishule.test` / `ChangeMe!Now1`)
 
-```bash
-make migrate
-make seed
-# → capture printed device apiKey + hmacSecret
-```
-
-### Act 3 — Log in as admin
+### Act 2 — Log in as super admin
 
 ```bash
 export API=http://localhost:3000
 TOKEN=$(curl -s -X POST $API/v1/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"admin@hillcrest.ac.ke","password":"Demo!Password1"}' \
+  -H 'X-Tenant-Slug: platform' \
+  -d '{"email":"admin@safarishule.test","password":"ChangeMe!Now1"}' \
   | jq -r '.accessToken')
 echo "Access token: ${TOKEN:0:40}..."
 ```
 
 Or in the web app: open http://localhost:5173, log in with the same credentials.
 
-### Act 4 — Tour
+### Act 3 — Create your first school (Hillcrest)
 
 ```bash
-curl -s $API/v1/fleet/vehicles -H "Authorization: Bearer $TOKEN" | jq '.data[] | {plate, capacity, status}'
-curl -s $API/v1/routes -H "Authorization: Bearer $TOKEN" | jq '.data[] | {code, name, direction}'
-curl -s $API/v1/students -H "Authorization: Bearer $TOKEN" | jq '.data[] | {name, rfidTagUid}'
+curl -s -X POST $API/v1/admin/tenants \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "X-Tenant-Slug: platform" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "slug": "hillcrest",
+    "subdomain": "hillcrest",
+    "name": "Hillcrest Academy",
+    "contactEmail": "admin@hillcrest.ac.ke",
+    "planTier": "pro",
+    "initialAdmin": {
+      "email": "admin@hillcrest.ac.ke",
+      "fullName": "Hillcrest Admin",
+      "phone": "+254712000001",
+      "password": "Hillcrest!Adm1"
+    }
+  }' | jq
 ```
 
-### Act 5 — Invite a new parent
+Note the returned tenant + admin. From here on, all scenarios below authenticate as the **Hillcrest admin** (not the platform super admin).
+
+### Act 4 — Log in as the school admin + tour
+
+```bash
+HILL_TOKEN=$(curl -s -X POST $API/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -H 'X-Tenant-Slug: hillcrest' \
+  -d '{"email":"admin@hillcrest.ac.ke","password":"Hillcrest!Adm1"}' \
+  | jq -r '.accessToken')
+
+curl -s $API/v1/fleet/vehicles -H "Authorization: Bearer $HILL_TOKEN" -H "X-Tenant-Slug: hillcrest" | jq
+curl -s $API/v1/routes         -H "Authorization: Bearer $HILL_TOKEN" -H "X-Tenant-Slug: hillcrest" | jq
+curl -s $API/v1/students       -H "Authorization: Bearer $HILL_TOKEN" -H "X-Tenant-Slug: hillcrest" | jq
+```
+
+Empty lists (200 responses) — you just created the school. Populate it via subsequent POSTs or the web UI.
+
+*(Scenarios below assume you've populated at least one vehicle, one route, one student, and one RFID device — either via the web UI or by scripting the POSTs.)*
+
+> **Token convention for the rest of this walkthrough**: use `$HILL_TOKEN` (the Hillcrest admin token from Act 4) for every subsequent request, and always include `-H "X-Tenant-Slug: hillcrest"`. The examples below abbreviate to `$TOKEN` for readability — substitute `$HILL_TOKEN` when running.
 
 ```bash
 curl -s -X POST $API/v1/onboarding/invitations \

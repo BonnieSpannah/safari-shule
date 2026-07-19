@@ -3,7 +3,7 @@ import { registerAs } from '@nestjs/config';
 export const appConfig = registerAs('app', () => ({
   env: process.env.NODE_ENV ?? 'development',
   port: Number(process.env.API_PORT ?? 3000),
-  baseDomain: process.env.APP_BASE_DOMAIN ?? 'safarishule.local',
+  baseDomain: process.env.APP_BASE_DOMAIN ?? 'safarishule.test',
   webPublicUrl: process.env.WEB_PUBLIC_URL ?? 'http://localhost:5173',
   apiPublicUrl: process.env.API_PUBLIC_URL ?? 'http://localhost:3000',
   integrationsMode: (process.env.INTEGRATIONS_MODE ?? 'mock') as 'mock' | 'live',
@@ -16,6 +16,20 @@ export const appConfig = registerAs('app', () => ({
   hardware: {
     replayWindowSeconds: Number(process.env.HARDWARE_HMAC_REPLAY_WINDOW_SECONDS ?? 300),
     throttlePerMinute: Number(process.env.HARDWARE_THROTTLE_PER_MINUTE ?? 60),
+  },
+  security: {
+    /** How old a password can get before we force a rotation on next login. */
+    passwordMaxAgeDays: Number(process.env.PASSWORD_MAX_AGE_DAYS ?? 90),
+    /** How many previous passwords we forbid re-use of. */
+    passwordHistoryCount: Number(process.env.PASSWORD_HISTORY_COUNT ?? 5),
+    /** TTL for activation ("welcome, set your password") tokens. */
+    activationTokenTtlHours: Number(process.env.ACTIVATION_TOKEN_TTL_HOURS ?? 48),
+    /** TTL for forgot-password reset tokens. */
+    resetTokenTtlMinutes: Number(process.env.RESET_TOKEN_TTL_MINUTES ?? 30),
+    /** Failed-login threshold before we auto-lock the account. */
+    failedLoginLockThreshold: Number(process.env.FAILED_LOGIN_LOCK_THRESHOLD ?? 8),
+    /** How long the lock stays in place. */
+    failedLoginLockMinutes: Number(process.env.FAILED_LOGIN_LOCK_MINUTES ?? 30),
   },
   at: {
     username: process.env.AT_USERNAME ?? 'sandbox',

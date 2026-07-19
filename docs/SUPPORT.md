@@ -83,7 +83,7 @@ TRACE=<uuid>
 make db:masked-restore
 
 # 4. Replay the trace against staging:
-./ops/repro/replay.sh --trace /tmp/trace.json --target https://staging.safari-shule.co.ke
+./ops/repro/replay.sh --trace /tmp/trace.json --target https://staging.safarishule.co.ke
 
 # 5. Reproduce; fix; write a test; ship.
 ```
@@ -104,7 +104,7 @@ Published to `#incidents` channel + linked in the customer status page's history
 
 ## 7. Status page
 
-Public: `https://status.safari-shule.co.ke` (M6). Components:
+Public: `https://status.safarishule.co.ke` (M6). Components:
 
 - API core
 - Web console

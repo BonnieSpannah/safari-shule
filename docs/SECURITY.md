@@ -87,4 +87,4 @@ Requests to `/v1/hardware/*` (except device provisioning) MUST include:
 
 ## Reporting a vulnerability
 
-Email `security@safari-shule.co.ke` (private). Do NOT open a public GitHub issue. Response SLA: 48h ack, 14d fix or mitigation plan.
+Email `security@safarishule.co.ke` (private). Do NOT open a public GitHub issue. Response SLA: 48h ack, 14d fix or mitigation plan.

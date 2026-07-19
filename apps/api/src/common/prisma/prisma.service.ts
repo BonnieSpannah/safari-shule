@@ -92,7 +92,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
    * and cross-tenant system-admin queries.
    */
   async withTenantSession<T>(tenantId: string | null, fn: () => Promise<T>): Promise<T> {
-    return this.$transaction(async (tx) => {
+    return this.$transaction(async (tx: Parameters<Parameters<PrismaClient['$transaction']>[0]>[0]) => {
       if (tenantId) {
         await tx.$executeRawUnsafe(`SET LOCAL app.tenant_id = '${tenantId.replace(/'/g, "''")}'`);
       } else {
@@ -106,7 +106,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     return this.$extends({
       query: {
         $allModels: {
-          async $allOperations({ model, operation, args, query }) {
+          async $allOperations({ model, operation, args, query }: {
+            model: string | undefined;
+            operation: string;
+            args: Record<string, unknown>;
+            query: (args: Record<string, unknown>) => Promise<unknown>;
+          }) {
             const ctx = getContext();
             const tenantId = ctx?.tenantId ?? null;
             const bypass = ctx?.bypassTenantScope ?? false;

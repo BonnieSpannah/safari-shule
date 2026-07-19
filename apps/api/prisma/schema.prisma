@@ -1,6 +1,7 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   previewFeatures = ["postgresqlExtensions"]
+  binaryTargets   = ["native", "linux-musl-arm64-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -21,9 +22,23 @@ enum PlanTier {
 }
 
 enum UserStatus {
-  active
-  invited
-  suspended
+  pending // just created, activation email sent, has not activated
+  active // normal, can log in
+  inactive // opted-out but recoverable (rare)
+  suspended // temporary admin block, can be lifted
+  deactivated // admin-disabled, can be re-activated
+  expired // password or account expired, must reset
+  blocked // security lockout (repeated failed logins, etc.)
+  deleted // soft-deleted; retention rules may still hold data
+}
+
+enum TenantStatus {
+  pending // created but not yet in service (rare — usually auto-active)
+  active // normal operation
+  suspended // temporary block (non-payment, violation, etc.)
+  deactivated // admin-disabled (can be re-activated)
+  cancelled // customer-initiated closure
+  deleted // soft-deleted; hard-delete follows retention policy
 }
 
 enum Gender {
@@ -161,53 +176,59 @@ enum RfidDeviceStatus {
 // =========================================================================
 
 model Tenant {
-  id            String   @id @default(uuid()) @db.Uuid
-  slug          String   @unique
-  subdomain     String   @unique
-  name          String
-  contactEmail  String
-  planTier      PlanTier @default(basic)
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String       @id @default(uuid()) @db.Uuid
+  slug         String       @unique
+  subdomain    String       @unique
+  name         String
+  contactEmail String
+  contactPhone String?
+  planTier     PlanTier     @default(basic)
+  status       TenantStatus @default(active)
+  isActive     Boolean      @default(true)
+  activatedAt  DateTime?
+  suspendedAt  DateTime?
+  cancelledAt  DateTime?
+  deletedAt    DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
-  users               User[]
-  roles               Role[]
-  permissions         Permission[]
-  rolePermissions     RolePermission[]
-  userRoles           UserRole[]
-  features            TenantFeature[]
-  auditLogs           AuditLog[]
-  refreshTokens       RefreshToken[]
-  otpCodes            OtpCode[]
-  attributeDefs       AttributeDefinition[]
-  staff               Staff[]
-  students            Student[]
-  parents             Parent[]
-  caretakers          Caretaker[]
-  parentStudents      ParentStudent[]
-  studentCaretakers   StudentCaretaker[]
-  invitations         Invitation[]
-  vehicles            Vehicle[]
-  fuelLogs            FuelLog[]
-  repairLogs          RepairLog[]
-  insuranceRecords    InsuranceRecord[]
-  routes              Route[]
-  busStops            BusStop[]
-  geofences           Geofence[]
-  routeAssignments    RouteAssignment[]
+  users                   User[]
+  roles                   Role[]
+  permissions             Permission[]
+  rolePermissions         RolePermission[]
+  userRoles               UserRole[]
+  features                TenantFeature[]
+  auditLogs               AuditLog[]
+  refreshTokens           RefreshToken[]
+  otpCodes                OtpCode[]
+  attributeDefs           AttributeDefinition[]
+  staff                   Staff[]
+  students                Student[]
+  parents                 Parent[]
+  caretakers              Caretaker[]
+  parentStudents          ParentStudent[]
+  studentCaretakers       StudentCaretaker[]
+  invitations             Invitation[]
+  vehicles                Vehicle[]
+  fuelLogs                FuelLog[]
+  repairLogs              RepairLog[]
+  insuranceRecords        InsuranceRecord[]
+  routes                  Route[]
+  busStops                BusStop[]
+  geofences               Geofence[]
+  routeAssignments        RouteAssignment[]
   studentRouteAssignments StudentRouteAssignment[]
-  trips               Trip[]
-  tripPassengers      TripPassenger[]
-  tripLocationSnaps   TripLocationSnapshot[]
-  incidents           Incident[]
-  emergencyContacts   IncidentEmergencyContact[]
-  rfidDevices         RfidDevice[]
-  rfidTags            RfidTag[]
-  attendanceEvents    AttendanceEvent[]
-  unknownTagScans     UnknownTagScan[]
-  mpesaTransactions   MpesaTransaction[]
-  outboundMessages    OutboundMessage[]
+  trips                   Trip[]
+  tripPassengers          TripPassenger[]
+  tripLocationSnaps       TripLocationSnapshot[]
+  incidents               Incident[]
+  emergencyContacts       IncidentEmergencyContact[]
+  rfidDevices             RfidDevice[]
+  rfidTags                RfidTag[]
+  attendanceEvents        AttendanceEvent[]
+  unknownTagScans         UnknownTagScan[]
+  mpesaTransactions       MpesaTransaction[]
+  outboundMessages        OutboundMessage[]
 
   // governance
   doNotContact          DoNotContact[]
@@ -217,20 +238,22 @@ model Tenant {
   impersonationSessions ImpersonationSession[]
   backupJobs            BackupJob[]
   clientEvents          ClientEvent[]
+  passwordHistory       PasswordHistory[]
+  resetTokens           PasswordResetToken[]
 
   @@index([isActive])
   @@map("tenants")
 }
 
 model TenantFeature {
-  id          String    @id @default(uuid()) @db.Uuid
-  tenantId    String    @db.Uuid
-  featureKey  String
-  enabled     Boolean   @default(false)
-  limits      Json      @default("{}")
-  expiresAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @db.Uuid
+  featureKey String
+  enabled    Boolean   @default(false)
+  limits     Json      @default("{}")
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -240,22 +263,33 @@ model TenantFeature {
 }
 
 model User {
-  id            String     @id @default(uuid()) @db.Uuid
-  tenantId      String     @db.Uuid
-  email         String
-  phoneE164     String?
-  passwordHash  String
-  status        UserStatus @default(invited)
-  fullName      String
-  lastLoginAt   DateTime?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id                 String     @id @default(uuid()) @db.Uuid
+  tenantId           String     @db.Uuid
+  email              String
+  phoneE164          String?
+  passwordHash       String
+  status             UserStatus @default(pending)
+  fullName           String
+  mustChangePassword Boolean    @default(true)
+  passwordUpdatedAt  DateTime   @default(now())
+  activatedAt        DateTime?
+  suspendedAt        DateTime?
+  deactivatedAt      DateTime?
+  deletedAt          DateTime?
+  lastLoginAt        DateTime?
+  failedLoginCount   Int        @default(0)
+  lockedUntil        DateTime?
+  preferences        Json?      @db.JsonB
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
 
-  tenant         Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  userRoles      UserRole[]
-  refreshTokens  RefreshToken[]
-  auditLogs      AuditLog[]     @relation("AuditActor")
-  invitationsSent Invitation[]  @relation("InvitationInviter")
+  tenant          Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userRoles       UserRole[]
+  refreshTokens   RefreshToken[]
+  auditLogs       AuditLog[]           @relation("AuditActor")
+  invitationsSent Invitation[]         @relation("InvitationInviter")
+  passwordHistory PasswordHistory[]
+  resetTokens     PasswordResetToken[]
 
   @@unique([tenantId, email])
   @@index([tenantId, status])
@@ -263,13 +297,13 @@ model User {
 }
 
 model Role {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @db.Uuid
-  key         String
-  label       String
-  isSystem    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  key       String
+  label     String
+  isSystem  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   rolePermissions RolePermission[]
@@ -280,13 +314,13 @@ model Role {
 }
 
 model Permission {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @db.Uuid
+  id          String @id @default(uuid()) @db.Uuid
+  tenantId    String @db.Uuid
   key         String
   description String
 
-  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  rolePermissions  RolePermission[]
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rolePermissions RolePermission[]
 
   @@unique([tenantId, key])
   @@map("permissions")
@@ -326,6 +360,9 @@ model RefreshToken {
   tenantId   String    @db.Uuid
   userId     String    @db.Uuid
   tokenHash  String    @unique
+  ipAddress  String?
+  userAgent  String?
+  lastUsedAt DateTime?
   revokedAt  DateTime?
   expiresAt  DateTime
   createdAt  DateTime  @default(now())
@@ -355,18 +392,18 @@ model OtpCode {
 }
 
 model AuditLog {
-  id           String   @id @default(uuid()) @db.Uuid
-  tenantId     String   @db.Uuid
-  actorUserId  String?  @db.Uuid
-  action       String
-  entityType   String
-  entityId     String?
-  before       Json?
-  after        Json?
-  ipAddress    String?
-  userAgent    String?
-  requestId    String?
-  createdAt    DateTime @default(now())
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  actorUserId String?  @db.Uuid
+  action      String
+  entityType  String
+  entityId    String?
+  before      Json?
+  after       Json?
+  ipAddress   String?
+  userAgent   String?
+  requestId   String?
+  createdAt   DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   actor  User?  @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
@@ -377,17 +414,17 @@ model AuditLog {
 }
 
 model Invitation {
-  id           String    @id @default(uuid()) @db.Uuid
-  tenantId     String    @db.Uuid
-  inviterId    String    @db.Uuid
-  email        String
-  phoneE164    String?
-  fullName     String
-  roleKeys     String[]
-  tokenHash    String    @unique
-  acceptedAt   DateTime?
-  expiresAt    DateTime
-  createdAt    DateTime  @default(now())
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @db.Uuid
+  inviterId  String    @db.Uuid
+  email      String
+  phoneE164  String?
+  fullName   String
+  roleKeys   String[]
+  tokenHash  String    @unique
+  acceptedAt DateTime?
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
 
   tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   inviter User   @relation("InvitationInviter", fields: [inviterId], references: [id], onDelete: Cascade)
@@ -401,22 +438,22 @@ model Invitation {
 // =========================================================================
 
 model AttributeDefinition {
-  id            String                @id @default(uuid()) @db.Uuid
-  tenantId      String                @db.Uuid
-  targetEntity  AttributeTargetEntity
-  slug          String
-  label         String
-  fieldType     AttributeFieldType
-  isRequired    Boolean               @default(false)
-  isNullable    Boolean               @default(true)
-  options       Json?
-  regex         String?
-  min           Float?
-  max           Float?
-  sortOrder     Int                   @default(0)
-  archivedAt    DateTime?
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
+  id           String                @id @default(uuid()) @db.Uuid
+  tenantId     String                @db.Uuid
+  targetEntity AttributeTargetEntity
+  slug         String
+  label        String
+  fieldType    AttributeFieldType
+  isRequired   Boolean               @default(false)
+  isNullable   Boolean               @default(true)
+  options      Json?
+  regex        String?
+  min          Float?
+  max          Float?
+  sortOrder    Int                   @default(0)
+  archivedAt   DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -430,20 +467,20 @@ model AttributeDefinition {
 // =========================================================================
 
 model Staff {
-  id                  String   @id @default(uuid()) @db.Uuid
-  tenantId            String   @db.Uuid
-  userId              String?  @unique @db.Uuid
-  employeeNumber      String
-  legalName           String
-  nationalId          String
-  phoneE164           String
-  email               String?
-  position            String
-  dateOfBirth         DateTime @db.Date
-  gender              Gender
-  flexibleAttributes  Json     @default("{}")
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                 String   @id @default(uuid()) @db.Uuid
+  tenantId           String   @db.Uuid
+  userId             String?  @unique @db.Uuid
+  employeeNumber     String
+  legalName          String
+  nationalId         String
+  phoneE164          String
+  email              String?
+  position           String
+  dateOfBirth        DateTime @db.Date
+  gender             Gender
+  flexibleAttributes Json     @default("{}")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -453,25 +490,25 @@ model Staff {
 }
 
 model Student {
-  id                       String   @id @default(uuid()) @db.Uuid
-  tenantId                 String   @db.Uuid
-  admissionNumber          String
-  legalName                String
-  birthCertificateNumber   String?
-  classroom                String?
-  dateOfBirth              DateTime @db.Date
-  gender                   Gender
-  flexibleAttributes       Json     @default("{}")
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  id                     String   @id @default(uuid()) @db.Uuid
+  tenantId               String   @db.Uuid
+  admissionNumber        String
+  legalName              String
+  birthCertificateNumber String?
+  classroom              String?
+  dateOfBirth            DateTime @db.Date
+  gender                 Gender
+  flexibleAttributes     Json     @default("{}")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
-  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  parents           ParentStudent[]
-  caretakers        StudentCaretaker[]
-  routeAssignments  StudentRouteAssignment[]
-  tripPassengers    TripPassenger[]
-  attendanceEvents  AttendanceEvent[]
-  rfidTags          RfidTag[]
+  tenant           Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parents          ParentStudent[]
+  caretakers       StudentCaretaker[]
+  routeAssignments StudentRouteAssignment[]
+  tripPassengers   TripPassenger[]
+  attendanceEvents AttendanceEvent[]
+  rfidTags         RfidTag[]
 
   @@unique([tenantId, admissionNumber])
   @@index([tenantId, legalName])
@@ -479,19 +516,19 @@ model Student {
 }
 
 model Parent {
-  id                  String   @id @default(uuid()) @db.Uuid
-  tenantId            String   @db.Uuid
-  userId              String?  @unique @db.Uuid
-  legalName           String
-  phoneE164           String
-  email               String?
-  nationalId          String?
-  occupation          String?
-  dateOfBirth         DateTime @db.Date
-  gender              Gender
-  flexibleAttributes  Json     @default("{}")
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                 String   @id @default(uuid()) @db.Uuid
+  tenantId           String   @db.Uuid
+  userId             String?  @unique @db.Uuid
+  legalName          String
+  phoneE164          String
+  email              String?
+  nationalId         String?
+  occupation         String?
+  dateOfBirth        DateTime @db.Date
+  gender             Gender
+  flexibleAttributes Json     @default("{}")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   students ParentStudent[]
@@ -502,17 +539,17 @@ model Parent {
 }
 
 model Caretaker {
-  id                  String   @id @default(uuid()) @db.Uuid
-  tenantId            String   @db.Uuid
-  legalName           String
-  phoneE164           String
-  relationship        String
-  nationalId          String?
-  dateOfBirth         DateTime @db.Date
-  gender              Gender
-  flexibleAttributes  Json     @default("{}")
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                 String   @id @default(uuid()) @db.Uuid
+  tenantId           String   @db.Uuid
+  legalName          String
+  phoneE164          String
+  relationship       String
+  nationalId         String?
+  dateOfBirth        DateTime @db.Date
+  gender             Gender
+  flexibleAttributes Json     @default("{}")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   tenant   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   students StudentCaretaker[]
@@ -522,13 +559,13 @@ model Caretaker {
 }
 
 model ParentStudent {
-  id         String         @id @default(uuid()) @db.Uuid
-  tenantId   String         @db.Uuid
-  parentId   String         @db.Uuid
-  studentId  String         @db.Uuid
-  relation   ParentRelation @default(guardian)
-  isPrimary  Boolean        @default(false)
-  createdAt  DateTime       @default(now())
+  id        String         @id @default(uuid()) @db.Uuid
+  tenantId  String         @db.Uuid
+  parentId  String         @db.Uuid
+  studentId String         @db.Uuid
+  relation  ParentRelation @default(guardian)
+  isPrimary Boolean        @default(false)
+  createdAt DateTime       @default(now())
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   parent  Parent  @relation(fields: [parentId], references: [id], onDelete: Cascade)
@@ -560,29 +597,29 @@ model StudentCaretaker {
 // =========================================================================
 
 model Vehicle {
-  id                   String           @id @default(uuid()) @db.Uuid
-  tenantId             String           @db.Uuid
-  registration         String
-  make                 String
-  model                String
-  year                 Int
-  capacity             Int
-  ownership            VehicleOwnership
-  status               VehicleStatus    @default(active)
-  assignedDriverId     String?          @db.Uuid
-  assignedAssistantId  String?          @db.Uuid
-  odometerKm           Int              @default(0)
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
+  id                  String           @id @default(uuid()) @db.Uuid
+  tenantId            String           @db.Uuid
+  registration        String
+  make                String
+  model               String
+  year                Int
+  capacity            Int
+  ownership           VehicleOwnership
+  status              VehicleStatus    @default(active)
+  assignedDriverId    String?          @db.Uuid
+  assignedAssistantId String?          @db.Uuid
+  odometerKm          Int              @default(0)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
-  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  insuranceRecords  InsuranceRecord[]
-  fuelLogs          FuelLog[]
-  repairLogs        RepairLog[]
-  routeAssignments  RouteAssignment[]
-  trips             Trip[]
-  rfidDevices       RfidDevice[]
-  geofences         Geofence[]
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  insuranceRecords InsuranceRecord[]
+  fuelLogs         FuelLog[]
+  repairLogs       RepairLog[]
+  routeAssignments RouteAssignment[]
+  trips            Trip[]
+  rfidDevices      RfidDevice[]
+  geofences        Geofence[]
 
   @@unique([tenantId, registration])
   @@index([tenantId, status])
@@ -590,16 +627,16 @@ model Vehicle {
 }
 
 model InsuranceRecord {
-  id            String   @id @default(uuid()) @db.Uuid
-  tenantId      String   @db.Uuid
-  vehicleId     String   @db.Uuid
-  provider      String
-  policyNumber  String
-  premiumKes    Int
-  startsOn      DateTime @db.Date
-  expiresOn     DateTime @db.Date
-  documentUrl   String?
-  createdAt     DateTime @default(now())
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  vehicleId    String   @db.Uuid
+  provider     String
+  policyNumber String
+  premiumKes   Int
+  startsOn     DateTime @db.Date
+  expiresOn    DateTime @db.Date
+  documentUrl  String?
+  createdAt    DateTime @default(now())
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
@@ -609,18 +646,18 @@ model InsuranceRecord {
 }
 
 model FuelLog {
-  id                    String             @id @default(uuid()) @db.Uuid
-  tenantId              String             @db.Uuid
-  vehicleId             String             @db.Uuid
-  driverUserId          String             @db.Uuid
-  liters                Decimal            @db.Decimal(10, 2)
-  costKes               Int
-  station               String
-  odometerKm            Int
-  mpesaTransactionId    String?            @db.Uuid
-  paymentStatus         FuelPaymentStatus  @default(pending)
-  occurredAt            DateTime
-  createdAt             DateTime           @default(now())
+  id                 String            @id @default(uuid()) @db.Uuid
+  tenantId           String            @db.Uuid
+  vehicleId          String            @db.Uuid
+  driverUserId       String            @db.Uuid
+  liters             Decimal           @db.Decimal(10, 2)
+  costKes            Int
+  station            String
+  odometerKm         Int
+  mpesaTransactionId String?           @db.Uuid
+  paymentStatus      FuelPaymentStatus @default(pending)
+  occurredAt         DateTime
+  createdAt          DateTime          @default(now())
 
   tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   vehicle  Vehicle           @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
@@ -631,18 +668,18 @@ model FuelLog {
 }
 
 model RepairLog {
-  id                  String        @id @default(uuid()) @db.Uuid
-  tenantId            String        @db.Uuid
-  vehicleId           String        @db.Uuid
-  reportedByUserId    String        @db.Uuid
-  approvalUserId      String?       @db.Uuid
-  description         String
-  vendor              String
-  costKes             Int
-  status              RepairStatus  @default(reported)
-  occurredOn          DateTime      @db.Date
-  mpesaTransactionId  String?       @db.Uuid
-  createdAt           DateTime      @default(now())
+  id                 String       @id @default(uuid()) @db.Uuid
+  tenantId           String       @db.Uuid
+  vehicleId          String       @db.Uuid
+  reportedByUserId   String       @db.Uuid
+  approvalUserId     String?      @db.Uuid
+  description        String
+  vendor             String
+  costKes            Int
+  status             RepairStatus @default(reported)
+  occurredOn         DateTime     @db.Date
+  mpesaTransactionId String?      @db.Uuid
+  createdAt          DateTime     @default(now())
 
   tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   vehicle  Vehicle           @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
@@ -653,22 +690,22 @@ model RepairLog {
 }
 
 model Route {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @db.Uuid
+  id          String                                @id @default(uuid()) @db.Uuid
+  tenantId    String                                @db.Uuid
   name        String
   description String?
-  isActive    Boolean  @default(true)
+  isActive    Boolean                               @default(true)
   startPoint  Unsupported("geography(Point, 4326)")
   endPoint    Unsupported("geography(Point, 4326)")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime                              @default(now())
+  updatedAt   DateTime                              @updatedAt
 
-  tenant                  Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  busStops                BusStop[]
-  geofences               Geofence[]
-  assignments             RouteAssignment[]
-  studentAssignments      StudentRouteAssignment[]
-  trips                   Trip[]
+  tenant             Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  busStops           BusStop[]
+  geofences          Geofence[]
+  assignments        RouteAssignment[]
+  studentAssignments StudentRouteAssignment[]
+  trips              Trip[]
 
   @@unique([tenantId, name])
   @@index([tenantId, isActive])
@@ -676,17 +713,17 @@ model Route {
 }
 
 model BusStop {
-  id                   String   @id @default(uuid()) @db.Uuid
-  tenantId             String   @db.Uuid
-  routeId              String   @db.Uuid
+  id                   String                                @id @default(uuid()) @db.Uuid
+  tenantId             String                                @db.Uuid
+  routeId              String                                @db.Uuid
   name                 String
   pickupOrder          Int
   scheduledPickupTime  String
   scheduledDropoffTime String
   location             Unsupported("geography(Point, 4326)")
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  route  Route  @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  tenant             Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  route              Route                    @relation(fields: [routeId], references: [id], onDelete: Cascade)
   studentAssignments StudentRouteAssignment[]
 
   @@unique([tenantId, routeId, pickupOrder])
@@ -695,14 +732,14 @@ model BusStop {
 }
 
 model Geofence {
-  id         String       @id @default(uuid()) @db.Uuid
-  tenantId   String       @db.Uuid
-  name       String
-  kind       GeofenceKind
-  routeId    String?      @db.Uuid
-  vehicleId  String?      @db.Uuid
-  polygon    Unsupported("geography(Polygon, 4326)")
-  createdAt  DateTime     @default(now())
+  id        String                                  @id @default(uuid()) @db.Uuid
+  tenantId  String                                  @db.Uuid
+  name      String
+  kind      GeofenceKind
+  routeId   String?                                 @db.Uuid
+  vehicleId String?                                 @db.Uuid
+  polygon   Unsupported("geography(Polygon, 4326)")
+  createdAt DateTime                                @default(now())
 
   tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   route   Route?   @relation(fields: [routeId], references: [id], onDelete: SetNull)
@@ -713,13 +750,13 @@ model Geofence {
 }
 
 model RouteAssignment {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @db.Uuid
-  routeId     String   @db.Uuid
-  vehicleId   String   @db.Uuid
-  daysOfWeek  Int[]
-  validFrom   DateTime @db.Date
-  validTo     DateTime? @db.Date
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @db.Uuid
+  routeId    String    @db.Uuid
+  vehicleId  String    @db.Uuid
+  daysOfWeek Int[]
+  validFrom  DateTime  @db.Date
+  validTo    DateTime? @db.Date
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   route   Route   @relation(fields: [routeId], references: [id], onDelete: Cascade)
@@ -731,13 +768,13 @@ model RouteAssignment {
 }
 
 model StudentRouteAssignment {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @db.Uuid
-  studentId   String   @db.Uuid
-  routeId     String   @db.Uuid
-  busStopId   String   @db.Uuid
-  validFrom   DateTime @db.Date
-  validTo     DateTime? @db.Date
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  studentId String    @db.Uuid
+  routeId   String    @db.Uuid
+  busStopId String    @db.Uuid
+  validFrom DateTime  @db.Date
+  validTo   DateTime? @db.Date
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -754,23 +791,23 @@ model StudentRouteAssignment {
 // =========================================================================
 
 model Trip {
-  id                String         @id @default(uuid()) @db.Uuid
-  tenantId          String         @db.Uuid
-  routeId           String         @db.Uuid
-  vehicleId         String         @db.Uuid
-  driverUserId      String         @db.Uuid
-  assistantUserId   String?        @db.Uuid
-  scheduledStart    DateTime
-  startedAt         DateTime?
-  endedAt           DateTime?
-  status            TripStatus     @default(scheduled)
-  direction         TripDirection
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  id              String        @id @default(uuid()) @db.Uuid
+  tenantId        String        @db.Uuid
+  routeId         String        @db.Uuid
+  vehicleId       String        @db.Uuid
+  driverUserId    String        @db.Uuid
+  assistantUserId String?       @db.Uuid
+  scheduledStart  DateTime
+  startedAt       DateTime?
+  endedAt         DateTime?
+  status          TripStatus    @default(scheduled)
+  direction       TripDirection
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  tenant            Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  route             Route                 @relation(fields: [routeId], references: [id], onDelete: Restrict)
-  vehicle           Vehicle               @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  tenant            Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  route             Route                  @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  vehicle           Vehicle                @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
   passengers        TripPassenger[]
   locationSnapshots TripLocationSnapshot[]
   incidents         Incident[]
@@ -782,13 +819,13 @@ model Trip {
 }
 
 model TripPassenger {
-  id          String    @id @default(uuid()) @db.Uuid
-  tenantId    String    @db.Uuid
-  tripId      String    @db.Uuid
-  studentId   String    @db.Uuid
-  expected    Boolean   @default(true)
-  boardedAt   DateTime?
-  alightedAt  DateTime?
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @db.Uuid
+  tripId     String    @db.Uuid
+  studentId  String    @db.Uuid
+  expected   Boolean   @default(true)
+  boardedAt  DateTime?
+  alightedAt DateTime?
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   trip    Trip    @relation(fields: [tripId], references: [id], onDelete: Cascade)
@@ -799,13 +836,13 @@ model TripPassenger {
 }
 
 model TripLocationSnapshot {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @db.Uuid
-  tripId      String   @db.Uuid
-  speedKph    Float
-  headingDeg  Float
-  recordedAt  DateTime
-  location    Unsupported("geography(Point, 4326)")
+  id         String                                @id @default(uuid()) @db.Uuid
+  tenantId   String                                @db.Uuid
+  tripId     String                                @db.Uuid
+  speedKph   Float
+  headingDeg Float
+  recordedAt DateTime
+  location   Unsupported("geography(Point, 4326)")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
@@ -815,21 +852,21 @@ model TripLocationSnapshot {
 }
 
 model Incident {
-  id                  String           @id @default(uuid()) @db.Uuid
-  tenantId            String           @db.Uuid
-  tripId              String           @db.Uuid
-  kind                IncidentKind
-  severity            IncidentSeverity @default(medium)
-  status              IncidentStatus   @default(reported)
-  reportedByUserId    String?          @db.Uuid
-  description         String
-  location            Unsupported("geography(Point, 4326)")?
-  acknowledgedAt      DateTime?
-  resolvedAt          DateTime?
-  resolutionNotes     String?
-  occurredAt          DateTime         @default(now())
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
+  id               String                                 @id @default(uuid()) @db.Uuid
+  tenantId         String                                 @db.Uuid
+  tripId           String                                 @db.Uuid
+  kind             IncidentKind
+  severity         IncidentSeverity                       @default(medium)
+  status           IncidentStatus                         @default(reported)
+  reportedByUserId String?                                @db.Uuid
+  description      String
+  location         Unsupported("geography(Point, 4326)")?
+  acknowledgedAt   DateTime?
+  resolvedAt       DateTime?
+  resolutionNotes  String?
+  occurredAt       DateTime                               @default(now())
+  createdAt        DateTime                               @default(now())
+  updatedAt        DateTime                               @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
@@ -840,14 +877,14 @@ model Incident {
 }
 
 model IncidentEmergencyContact {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @db.Uuid
-  name        String
-  phoneE164   String
-  role        String
-  priority    Int      @default(0)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  name      String
+  phoneE164 String
+  role      String
+  priority  Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -860,20 +897,20 @@ model IncidentEmergencyContact {
 // =========================================================================
 
 model RfidDevice {
-  id                  String            @id @default(uuid()) @db.Uuid
-  tenantId            String            @db.Uuid
+  id                  String           @id @default(uuid()) @db.Uuid
+  tenantId            String           @db.Uuid
   deviceId            String
-  vehicleId           String?           @db.Uuid
+  vehicleId           String?          @db.Uuid
   apiKeyHash          String
   hmacSecretEncrypted String
-  status              RfidDeviceStatus  @default(active)
+  status              RfidDeviceStatus @default(active)
   lastSeenAt          DateTime?
   keyRotatedAt        DateTime?
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
-  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  vehicle Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vehicle          Vehicle?          @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
   attendanceEvents AttendanceEvent[]
 
   @@unique([tenantId, deviceId])
@@ -882,15 +919,15 @@ model RfidDevice {
 }
 
 model RfidTag {
-  id         String    @id @default(uuid()) @db.Uuid
-  tenantId   String    @db.Uuid
-  tagUid     String
-  studentId  String    @db.Uuid
-  issuedAt   DateTime  @default(now())
-  revokedAt  DateTime?
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  tagUid    String
+  studentId String    @db.Uuid
+  issuedAt  DateTime  @default(now())
+  revokedAt DateTime?
 
-  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  student          Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
   attendanceEvents AttendanceEvent[]
 
   @@unique([tenantId, tagUid])
@@ -899,16 +936,16 @@ model RfidTag {
 }
 
 model AttendanceEvent {
-  id           String              @id @default(uuid()) @db.Uuid
-  tenantId     String              @db.Uuid
-  tripId       String              @db.Uuid
-  studentId    String              @db.Uuid
-  deviceId     String              @db.Uuid
-  tagId        String              @db.Uuid
-  direction    AttendanceDirection
-  scannedAt    DateTime
-  ingestedAt   DateTime            @default(now())
-  rawPayload   Json
+  id         String              @id @default(uuid()) @db.Uuid
+  tenantId   String              @db.Uuid
+  tripId     String              @db.Uuid
+  studentId  String              @db.Uuid
+  deviceId   String              @db.Uuid
+  tagId      String              @db.Uuid
+  direction  AttendanceDirection
+  scannedAt  DateTime
+  ingestedAt DateTime            @default(now())
+  rawPayload Json
 
   tenant  Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   trip    Trip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
@@ -941,23 +978,23 @@ model UnknownTagScan {
 // =========================================================================
 
 model MpesaTransaction {
-  id                    String                  @id @default(uuid()) @db.Uuid
-  tenantId              String                  @db.Uuid
-  purpose               MpesaTransactionPurpose
-  amountKes             Int
-  phoneE164             String
-  accountReference      String
-  checkoutRequestId     String                  @unique
-  merchantRequestId     String?
-  mpesaReceiptNumber    String?
-  status                MpesaTransactionStatus  @default(initiated)
-  resultCode            Int?
-  resultDescription     String?
-  callbackPayload       Json?
-  initiatedAt           DateTime                @default(now())
-  completedAt           DateTime?
+  id                 String                  @id @default(uuid()) @db.Uuid
+  tenantId           String                  @db.Uuid
+  purpose            MpesaTransactionPurpose
+  amountKes          Int
+  phoneE164          String
+  accountReference   String
+  checkoutRequestId  String                  @unique
+  merchantRequestId  String?
+  mpesaReceiptNumber String?
+  status             MpesaTransactionStatus  @default(initiated)
+  resultCode         Int?
+  resultDescription  String?
+  callbackPayload    Json?
+  initiatedAt        DateTime                @default(now())
+  completedAt        DateTime?
 
-  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   fuelLogs   FuelLog[]
   repairLogs RepairLog[]
 
@@ -966,20 +1003,20 @@ model MpesaTransaction {
 }
 
 model OutboundMessage {
-  id                  String               @id @default(uuid()) @db.Uuid
-  tenantId            String               @db.Uuid
-  channel             NotificationChannel
-  to                  String
-  templateId          String
-  body                String
-  status              NotificationStatus   @default(queued)
-  providerMessageId   String?
-  costCents           Int?
-  error               String?
-  attempts            Int                  @default(0)
-  requestId           String?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  id                String              @id @default(uuid()) @db.Uuid
+  tenantId          String              @db.Uuid
+  channel           NotificationChannel
+  to                String
+  templateId        String
+  body              String
+  status            NotificationStatus  @default(queued)
+  providerMessageId String?
+  costCents         Int?
+  error             String?
+  attempts          Int                 @default(0)
+  requestId         String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -1048,21 +1085,21 @@ enum ConsentStatus {
 }
 
 model Consent {
-  id             String         @id @default(uuid()) @db.Uuid
-  tenantId       String         @db.Uuid
-  subjectUserId  String?        @db.Uuid
-  subjectEmail   String?
-  subjectPhone   String?
-  purpose        ConsentPurpose
-  status         ConsentStatus  @default(granted)
-  legalBasis     String
-  version        String
-  grantedAt      DateTime       @default(now())
-  withdrawnAt    DateTime?
-  expiresAt      DateTime?
+  id              String         @id @default(uuid()) @db.Uuid
+  tenantId        String         @db.Uuid
+  subjectUserId   String?        @db.Uuid
+  subjectEmail    String?
+  subjectPhone    String?
+  purpose         ConsentPurpose
+  status          ConsentStatus  @default(granted)
+  legalBasis      String
+  version         String
+  grantedAt       DateTime       @default(now())
+  withdrawnAt     DateTime?
+  expiresAt       DateTime?
   evidencePayload Json?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -1089,21 +1126,21 @@ enum DsrStatus {
 }
 
 model DataSubjectRequest {
-  id             String    @id @default(uuid()) @db.Uuid
-  tenantId       String    @db.Uuid
-  subjectUserId  String?   @db.Uuid
-  subjectEmail   String?
-  subjectPhone   String?
-  kind           DsrKind
-  status         DsrStatus @default(received)
-  details        String?
-  handlerUserId  String?   @db.Uuid
-  dueBy          DateTime
-  fulfilledAt    DateTime?
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @db.Uuid
+  subjectUserId   String?   @db.Uuid
+  subjectEmail    String?
+  subjectPhone    String?
+  kind            DsrKind
+  status          DsrStatus @default(received)
+  details         String?
+  handlerUserId   String?   @db.Uuid
+  dueBy           DateTime
+  fulfilledAt     DateTime?
   rejectionReason String?
-  auditPayload   Json?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  auditPayload    Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -1119,17 +1156,17 @@ enum RetentionAction {
 }
 
 model RetentionPolicy {
-  id           String          @id @default(uuid()) @db.Uuid
-  tenantId     String          @db.Uuid
-  resource     String
-  retainDays   Int
-  action       RetentionAction @default(anonymize)
-  legalHold    Boolean         @default(false)
-  isSystem     Boolean         @default(false)
-  description  String?
-  lastRunAt    DateTime?
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  id          String          @id @default(uuid()) @db.Uuid
+  tenantId    String          @db.Uuid
+  resource    String
+  retainDays  Int
+  action      RetentionAction @default(anonymize)
+  legalHold   Boolean         @default(false)
+  isSystem    Boolean         @default(false)
+  description String?
+  lastRunAt   DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -1200,23 +1237,23 @@ enum BackupStatus {
 }
 
 model BackupJob {
-  id             String       @id @default(uuid()) @db.Uuid
-  tenantId       String?      @db.Uuid
-  kind           BackupKind
-  target         BackupTarget
-  status         BackupStatus @default(scheduled)
-  startedAt      DateTime?
-  finishedAt     DateTime?
-  sizeBytes      BigInt?
-  checksumSha256 String?
-  location       String?
-  retentionDays  Int
-  encrypted      Boolean      @default(true)
+  id              String       @id @default(uuid()) @db.Uuid
+  tenantId        String?      @db.Uuid
+  kind            BackupKind
+  target          BackupTarget
+  status          BackupStatus @default(scheduled)
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  sizeBytes       BigInt?
+  checksumSha256  String?
+  location        String?
+  retentionDays   Int
+  encrypted       Boolean      @default(true)
   encryptionKeyId String?
-  error          String?
-  metadata       Json?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  error           String?
+  metadata        Json?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -1244,21 +1281,21 @@ enum ClientEventKind {
 }
 
 model ClientEvent {
-  id                 String           @id @default(uuid()) @db.Uuid
-  tenantId           String           @db.Uuid
-  userId             String?          @db.Uuid
-  sessionId          String?
-  kind               ClientEventKind
-  resource           String?
-  resourceId         String?
-  path               String?
-  traceId            String?
-  ipAddress          String?
-  userAgent          String?
-  deviceFingerprint  String?
-  geoHint            String?
-  payload            Json?
-  createdAt          DateTime         @default(now())
+  id                String          @id @default(uuid()) @db.Uuid
+  tenantId          String          @db.Uuid
+  userId            String?         @db.Uuid
+  sessionId         String?
+  kind              ClientEventKind
+  resource          String?
+  resourceId        String?
+  path              String?
+  traceId           String?
+  ipAddress         String?
+  userAgent         String?
+  deviceFingerprint String?
+  geoHint           String?
+  payload           Json?
+  createdAt         DateTime        @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -1266,4 +1303,43 @@ model ClientEvent {
   @@index([tenantId, userId, createdAt(sort: Desc)])
   @@index([tenantId, resource, resourceId, createdAt(sort: Desc)])
   @@map("client_events")
+}
+
+// =========================================================================
+// PASSWORD LIFECYCLE — history + reset tokens
+// =========================================================================
+
+model PasswordHistory {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @db.Uuid
+  userId          String   @db.Uuid
+  passwordHash    String
+  changedByUserId String?  @db.Uuid
+  reason          String? // 'self' | 'admin_rotate' | 'reset' | 'expiry' | 'initial'
+  createdAt       DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId, createdAt(sort: Desc)])
+  @@map("password_history")
+}
+
+model PasswordResetToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  userId      String    @db.Uuid
+  tokenHash   String    @unique
+  purpose     String    @default("reset") // 'reset' | 'activation'
+  expiresAt   DateTime
+  usedAt      DateTime?
+  requestedIp String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId, purpose, createdAt(sort: Desc)])
+  @@map("password_reset_tokens")
 }

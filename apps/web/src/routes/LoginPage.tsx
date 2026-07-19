@@ -9,12 +9,19 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { login } from '@/lib/api/auth';
+import { login, fetchMe } from '@/lib/api/auth';
 import { useAuthStore } from '@/stores/auth.store';
+import { env, resolveTenantSlugFromHost } from '@/lib/env';
+import { rememberTenantSlug, readRememberedTenantSlug } from '@/lib/api/client';
 
 const schema = z.object({
+  tenantSlug: z
+    .string()
+    .min(1, 'Tenant is required')
+    .regex(/^[a-z][a-z0-9-]*$/, 'Lowercase letters, digits, hyphens (start with a letter)'),
   email: z.string().min(1, 'Email is required').email('Enter a valid email'),
   password: z.string().min(1, 'Password is required'),
 });
@@ -25,10 +32,22 @@ interface LocationState {
   from?: string;
 }
 
+function initialTenantSlug(): string {
+  if (typeof window !== 'undefined') {
+    const fromHost = resolveTenantSlugFromHost(window.location.hostname);
+    if (fromHost) return fromHost;
+    const persisted = readRememberedTenantSlug();
+    if (persisted) return persisted;
+  }
+  return env.tenantSlug;
+}
+
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const setSession = useAuthStore((s) => s.setSession);
+  const derivedTenant =
+    typeof window !== 'undefined' ? resolveTenantSlugFromHost(window.location.hostname) : null;
 
   const {
     register,
@@ -36,22 +55,44 @@ export function LoginPage() {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { email: '', password: '' },
+    defaultValues: { tenantSlug: initialTenantSlug(), email: '', password: '' },
   });
 
   const mutation = useMutation({
-    mutationFn: (values: FormValues) => login(values.email, values.password),
-    onSuccess: (data) => {
-      setSession(data.accessToken, data.refreshToken, data.user);
+    mutationFn: async (values: FormValues) => {
+      // Persist the chosen tenant BEFORE the login request so the axios
+      // interceptor stamps X-Tenant-Slug correctly on this call.
+      rememberTenantSlug(values.tenantSlug.trim());
+      const loginResponse = await login(values.email, values.password);
+      // Store the access token so /v1/auth/me can use it, then fetch full
+      // identity (roles + permissions) before we finish the login flow.
+      useAuthStore.getState().setTokens(loginResponse.accessToken, loginResponse.refreshToken);
+      const fullUser = await fetchMe();
+      return { loginResponse, fullUser };
+    },
+    onSuccess: ({ loginResponse, fullUser }) => {
+      setSession(loginResponse.accessToken, loginResponse.refreshToken, fullUser);
+      // Immediately redirect to Security page if a password change is required.
+      if (fullUser.mustChangePassword) {
+        navigate('/me/security', { replace: true });
+        return;
+      }
       const from = (location.state as LocationState | null)?.from ?? '/';
       navigate(from, { replace: true });
     },
     onError: (error) => {
-      if (error instanceof AxiosError && error.response?.status === 401) {
-        toast.error('Invalid email or password.');
-      } else {
-        toast.error('Could not sign in. Please try again.');
+      if (error instanceof AxiosError) {
+        const status = error.response?.status;
+        if (status === 401) {
+          toast.error('Invalid email or password.');
+          return;
+        }
+        if (status === 400) {
+          toast.error('Tenant not recognised. Check the tenant / school code and try again.');
+          return;
+        }
       }
+      toast.error('Could not sign in. Please try again.');
     },
   });
 
@@ -80,6 +121,35 @@ export function LoginPage() {
               noValidate
             >
               <div className="space-y-1.5">
+                <Label htmlFor="tenantSlug">Tenant / school code</Label>
+                <Input
+                  id="tenantSlug"
+                  type="text"
+                  autoComplete="organization"
+                  spellCheck={false}
+                  autoCapitalize="off"
+                  readOnly={!!derivedTenant}
+                  invalid={!!errors.tenantSlug}
+                  aria-describedby={
+                    errors.tenantSlug ? 'tenantSlug-error' : 'tenantSlug-hint'
+                  }
+                  placeholder="e.g. shule-academy"
+                  {...register('tenantSlug')}
+                />
+                {errors.tenantSlug ? (
+                  <p id="tenantSlug-error" className="text-xs text-danger">
+                    {errors.tenantSlug.message}
+                  </p>
+                ) : (
+                  <p id="tenantSlug-hint" className="text-xs text-muted-foreground">
+                    {derivedTenant
+                      ? 'Detected from this URL — cannot be changed here.'
+                      : 'The short code your school (or Safari Shule) gave you.'}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
@@ -87,7 +157,7 @@ export function LoginPage() {
                   autoComplete="username"
                   invalid={!!errors.email}
                   aria-describedby={errors.email ? 'email-error' : undefined}
-                  placeholder="admin@hillcrest.ac.ke"
+                  placeholder="you@example.com"
                   {...register('email')}
                 />
                 {errors.email && (
@@ -98,10 +168,18 @@ export function LoginPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="password">Password</Label>
-                <Input
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password</Label>
+                  <Link
+                    to="/forgot-password"
+                    className="text-xs text-primary hover:underline"
+                    tabIndex={-1}
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+                <PasswordInput
                   id="password"
-                  type="password"
                   autoComplete="current-password"
                   invalid={!!errors.password}
                   aria-describedby={errors.password ? 'password-error' : undefined}
@@ -124,8 +202,8 @@ export function LoginPage() {
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
           Trouble signing in?{' '}
-          <Link to="/support" className="text-primary hover:underline">
-            Contact support
+          <Link to="/forgot-password" className="text-primary hover:underline">
+            Reset your password
           </Link>
         </p>
       </div>

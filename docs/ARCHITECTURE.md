@@ -13,7 +13,7 @@ flowchart LR
   end
 
   subgraph Edge
-    Nginx[nginx reverse proxy<br/>*.safari-shule.test]
+    Nginx[nginx reverse proxy<br/>*.safarishule.test]
   end
 
   subgraph API [NestJS API — apps/api]
@@ -60,7 +60,7 @@ flowchart LR
 
 ## Request lifecycle
 
-1. **nginx** terminates TLS and routes by subdomain (`api.*` → api:3000, tenant `*.safari-shule.test` → web:5173 with `X-Tenant-Subdomain` injected).
+1. **nginx** terminates TLS and routes by subdomain (`api.*` → api:3000, tenant `*.safarishule.test` → web:5173 with `X-Tenant-Subdomain` injected).
 2. **ThrottlerGuard** — global rate limit + per-route overrides.
 3. **JwtAuthGuard** *(skipped for `@Public()` and hardware routes)* — verifies signature, extracts `tid`, `sub`, `roles`, `permissions`.
 4. **PermissionGuard** — declaratively enforced via `@Permissions('vehicles.create', …)`. 60-second Redis cache per user.

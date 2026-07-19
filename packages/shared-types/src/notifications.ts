@@ -18,6 +18,8 @@ export const TEMPLATE_IDS = [
   'sos.alert',
   'mpesa.receipt',
   'monthly.statement',
+  'auth.activation',
+  'auth.reset-password',
 ] as const;
 export type TemplateId = (typeof TEMPLATE_IDS)[number];
 

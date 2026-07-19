@@ -82,7 +82,7 @@ Instead:
 3. In staging, load the masked equivalent of the customer's tenant, replay the exact request sequence:
 
     ```bash
-    ./ops/repro/replay.sh --trace /tmp/trace.json --target https://staging.safari-shule.co.ke
+    ./ops/repro/replay.sh --trace /tmp/trace.json --target https://staging.safarishule.co.ke
     ```
 
 4. Fix in a feature branch; write a test that codifies the bug; merge; ship.

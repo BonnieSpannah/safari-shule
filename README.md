@@ -11,35 +11,42 @@
 
 ---
 
-## Quickstart
+## Quickstart (fresh install)
 
-**Prereqs:** Docker Desktop, Node.js 20+, pnpm. On macOS, [Laravel Herd](https://herd.laravel.com) is optional but strongly recommended for `*.safari-shule.test` HTTPS.
+**Prereqs:** Docker Desktop running, Node.js 20+, pnpm.
 
 ```bash
 git clone git@github.com:BonnieSpannah/safari-shule.git
 cd safari-shule
-make preflight    # verify your machine is ready (no changes)
-make bootstrap    # animated installer — .env, secrets, Herd, docker, migrate, seed
+
+# 1. Environment — copy the template and edit if you want non-defaults.
+cp .env.example .env
+
+# 2. Install workspace deps
+pnpm install
+
+# 3. Stateful services in Docker
+docker compose -f infra/docker-compose.yml --env-file .env up -d postgres redis mailhog
+
+# 4. Load .env into the current shell (Prisma needs DATABASE_URL from it)
+set -a && source .env && set +a
+
+# 5. Apply schema
+pnpm --filter @safari-shule/api exec prisma migrate deploy
+
+# 6. Seed CORE data — all permissions, all roles, ONE super admin user.
+#    No schools, no demo data. That's it. You'll create schools from the UI.
+pnpm --filter @safari-shule/api run db:seed
+
+# 7. Start api + web
+pnpm dev
 ```
 
-That's it. The bootstrap will:
+Open **http://localhost:5173** and log in with the super admin credentials the seed printed (defaults are `admin@safarishule.test` / `ChangeMe!Now1` — change them in `.env` before seeding to use your own).
 
-1. Detect your OS + prerequisites
-2. Ask a handful of environment questions (Enter accepts sensible defaults)
-3. Generate all secrets (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `DATA_ENCRYPTION_KEY`, `POSTGRES_PASSWORD`)
-4. Wire Herd for `*.<your-domain>` HTTPS on macOS
-5. Render nginx from a template using your chosen base domain
-6. `pnpm install`, `docker compose up -d`, `prisma migrate deploy`, `pnpm db:seed`
-7. Print the URLs + demo credentials
+**All defaults** (super admin email, password, URLs, provider secrets) are documented in [.env.example](.env.example) with comments explaining what to change and when.
 
-When it finishes you'll see:
-
-- **Web console** — `https://<your-domain>` (default `https://safari-shule.test`)
-- **API + Swagger** — `https://api.<your-domain>/docs`
-- **Tenant subdomain** — `https://hillcrest.<your-domain>`
-- **Mailhog / Grafana / Prometheus / GlitchTip / Bull Board** — links printed on success
-
-Detailed setup, custom domain wiring, and env-var reference: **[docs/SETUP.md](docs/SETUP.md)**.
+Detailed setup + custom domain wiring: **[docs/SETUP.md](docs/SETUP.md)**.
 
 ## What's inside
 

@@ -192,7 +192,7 @@ gather_config() {
   printf "\n"
 
   CFG_ENV=$(ask_choice "Environment" "dev" "dev" "uat" "prod-preview")
-  CFG_DOMAIN=$(ask "Base domain (drives API, web, tenant subdomains, mobile)" "safari-shule.test")
+  CFG_DOMAIN=$(ask "Base domain (drives API, web, tenant subdomains, mobile)" "safarishule.test")
   CFG_MAIL=$(ask_choice "Email provider" "mailhog" "mailhog" "mailtrap" "smtp" "mock")
   CFG_SMS=$(ask_choice "SMS provider" "mock" "mock" "africas_talking" "twilio" "infobip")
   CFG_INTEG=$(ask_choice "Integrations mode" "mock" "mock" "live")
@@ -442,7 +442,7 @@ wire_herd() {
 
   # Herd secures the parked directory name as <name>.test — we rename via
   # `herd link` when the target base domain isn't the default parking name.
-  if [[ "$CFG_DOMAIN" != "safari-shule.test" ]]; then
+  if [[ "$CFG_DOMAIN" != "safarishule.test" ]]; then
     warn "Custom domain ${U}$CFG_DOMAIN${R} — configure Herd's parked TLD manually if needed."
   fi
 

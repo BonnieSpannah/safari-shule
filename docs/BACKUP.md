@@ -62,7 +62,7 @@ Every backup job writes a row into `backup_jobs` with `kind`, `target`, `sizeByt
 
 - **Success** — one line in the daily backup digest email at 08:00 EAT.
 - **Failure** — immediate:
-  1. Email to `ops@safari-shule.co.ke` + designated tenant admin
+  1. Email to `ops@safarishule.co.ke` + designated tenant admin
   2. SMS to the on-call phone
   3. GlitchTip / Sentry event with `severity=error`
   4. Grafana alert firing (`safari_backup_last_success_age_seconds > 3600`)

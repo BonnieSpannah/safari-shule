@@ -1,6 +1,9 @@
 FROM node:20-alpine AS deps
 WORKDIR /workspace
-RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+# Install openssl so Prisma's postinstall detects 3.0.x and downloads the
+# correct schema-engine binary — eliminates the runtime download on make migrate.
+RUN apk add --no-cache openssl \
+ && corepack enable && corepack prepare pnpm@9.15.9 --activate
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY tsconfig.base.json ./
 # Copy EVERY workspace's package.json so --frozen-lockfile is honoured.
@@ -22,20 +25,28 @@ COPY apps/api ./apps/api
 RUN find . -name '*.tsbuildinfo' -delete \
  && rm -rf packages/shared-types/dist apps/api/dist
 RUN pnpm --filter @safari-shule/shared-types build \
- && pnpm --filter @safari-shule/api prisma generate \
+ && DATABASE_URL=postgresql://build:build@localhost:5432/build \
+    DIRECT_URL=postgresql://build:build@localhost:5432/build \
+    pnpm --filter @safari-shule/api exec prisma generate \
  && pnpm --filter @safari-shule/api build
 
 FROM node:20-alpine AS runtime
-WORKDIR /app
+# Preserve the workspace directory layout so pnpm's relative symlinks resolve.
+# apps/api/node_modules/X -> ../../node_modules/.pnpm/X  (relative, stays valid)
+WORKDIR /workspace
 RUN apk add --no-cache openssl tini \
  && corepack enable && corepack prepare pnpm@9.15.9 --activate
 ENV NODE_ENV=production
-COPY --from=build /workspace/apps/api/dist ./dist
-COPY --from=build /workspace/apps/api/package.json ./package.json
-COPY --from=build /workspace/apps/api/prisma ./prisma
+# Stub .env so the seed script's --env-file=../../.env doesn't throw;
+# Docker injects the real values via env_file/environment in compose.
+RUN touch /workspace/.env
 COPY --from=build /workspace/node_modules ./node_modules
-COPY --from=build /workspace/apps/api/node_modules ./apps_node_modules
-RUN cp -rn ./apps_node_modules/. ./node_modules/ && rm -rf ./apps_node_modules
+COPY --from=build /workspace/packages/shared-types ./packages/shared-types
+COPY --from=build /workspace/apps/api/node_modules ./apps/api/node_modules
+COPY --from=build /workspace/apps/api/dist ./apps/api/dist
+COPY --from=build /workspace/apps/api/package.json ./apps/api/package.json
+COPY --from=build /workspace/apps/api/prisma ./apps/api/prisma
+WORKDIR /workspace/apps/api
 EXPOSE 3000
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/src/main.js"]
