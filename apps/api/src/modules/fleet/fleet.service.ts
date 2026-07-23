@@ -14,14 +14,17 @@ import type {
 export class FleetService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listVehicles(q: PaginationQuery) {
-    const where: any = {};
+  async listVehicles(q: PaginationQuery & { status?: string; ownership?: string }) {
+    const tenantId = requireTenantId();
+    const where: any = { tenantId };
     if (q.q)
       where.OR = [
         { registration: { contains: q.q, mode: 'insensitive' } },
         { make: { contains: q.q, mode: 'insensitive' } },
         { model: { contains: q.q, mode: 'insensitive' } },
       ];
+    if (q.status) where.status = q.status;
+    if (q.ownership) where.ownership = q.ownership;
     const [total, data] = await Promise.all([
       this.prisma.vehicle.count({ where }),
       this.prisma.vehicle.findMany({ where, ...buildPagination(q) }),

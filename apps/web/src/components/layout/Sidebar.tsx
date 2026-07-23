@@ -4,6 +4,7 @@ import {
   Bus,
   Route as RouteIcon,
   Users,
+  UserRound,
   Radio,
   Siren,
   CreditCard,
@@ -51,22 +52,22 @@ const SECTIONS: readonly NavSection[] = [
     label: 'Operations',
     items: [
       {
-        to: '/fleet',
-        label: 'Fleet',
-        icon: Bus,
-        permissions: ['vehicles.list', 'vehicles.view'],
-      },
-      {
-        to: '/routes',
-        label: 'Routes',
-        icon: RouteIcon,
-        permissions: ['routes.list', 'routes.view', 'routes.manage'],
-      },
-      {
         to: '/students',
         label: 'Students',
         icon: Users,
-        permissions: ['students.list', 'students.view'],
+        permissions: ['students.view', 'students.create', 'students.edit'],
+      },
+      {
+        to: '/parents',
+        label: 'Guardians',
+        icon: UserRound,
+        permissions: ['parents.view', 'parents.create'],
+      },
+      {
+        to: '/fleet',
+        label: 'Fleet',
+        icon: Bus,
+        permissions: ['vehicles.view', 'vehicles.create'],
       },
       {
         to: '/trips',
@@ -128,7 +129,7 @@ const SECTIONS: readonly NavSection[] = [
         to: '/settings',
         label: 'Settings',
         icon: Settings,
-        permissions: ['settings.view', 'roles.view', 'users.list', 'permissions.view'],
+        permissions: ['invitations.send', 'staff.view', 'staff.create', 'roles.view', 'users.view'],
       },
     ],
   },

@@ -3,19 +3,29 @@ import { randomUUID } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { requireTenantId } from '../../common/context/request-context';
+import { buildPagination, paginated } from '../../common/pagination/pagination';
 import type {
   RouteInput,
   GeofenceInput,
   StudentRouteAssignmentInput,
   LatLng,
+  PaginationQuery,
 } from '@safari-shule/shared-types';
 
 @Injectable()
 export class RoutesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listRoutes() {
-    return this.prisma.route.findMany({ orderBy: { name: 'asc' } });
+  async listRoutes(q: PaginationQuery & { isActive?: string }) {
+    const tenantId = requireTenantId();
+    const where: any = { tenantId };
+    if (q.q) where.name = { contains: q.q, mode: 'insensitive' };
+    if (q.isActive !== undefined) where.isActive = q.isActive === 'true';
+    const [total, data] = await Promise.all([
+      this.prisma.route.count({ where }),
+      this.prisma.route.findMany({ where, ...buildPagination(q), orderBy: { name: 'asc' } }),
+    ]);
+    return paginated(data, total, q);
   }
 
   async getRoute(id: string) {

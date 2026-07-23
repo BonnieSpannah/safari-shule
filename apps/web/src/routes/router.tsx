@@ -11,6 +11,11 @@ import { PlaceholderPage } from './PlaceholderPage';
 import { NotFoundPage } from './NotFoundPage';
 import { TenantsPage } from './platform/TenantsPage';
 import { TenantDetailPage } from './platform/TenantDetailPage';
+import { StudentsPage } from './students/StudentsPage';
+import { FleetPage } from './fleet/FleetPage';
+import { RoutesPage } from './routes/RoutesPage';
+import { SettingsPage } from './settings/SettingsPage';
+import { ParentsPage } from './parents/ParentsPage';
 import { ProfilePage } from './me/ProfilePage';
 import { SecurityPage } from './me/SecurityPage';
 import { PreferencesPage } from './me/PreferencesPage';
@@ -45,31 +50,33 @@ export const router = createBrowserRouter([
       {
         path: 'fleet',
         element: (
-          <PlaceholderPage
-            title="Fleet"
-            description="Vehicles, fuel logs, repairs and insurance."
-            eta="Fleet management screens ship in M2."
-          />
+          <PermissionGate anyOf={['vehicles.view', 'vehicles.create']}>
+            <FleetPage />
+          </PermissionGate>
         ),
       },
       {
         path: 'routes',
         element: (
-          <PlaceholderPage
-            title="Routes"
-            description="Draw routes on the map, manage bus stops and student assignments."
-            eta="Route drawing tools ship in M2."
-          />
+          <PermissionGate anyOf={['routes.view', 'routes.manage']}>
+            <RoutesPage />
+          </PermissionGate>
         ),
       },
       {
         path: 'students',
         element: (
-          <PlaceholderPage
-            title="Students"
-            description="Roster, RFID tags, route assignments and guardians."
-            eta="Student management ships in M2."
-          />
+          <PermissionGate anyOf={['students.view', 'students.create']}>
+            <StudentsPage />
+          </PermissionGate>
+        ),
+      },
+      {
+        path: 'parents',
+        element: (
+          <PermissionGate anyOf={['parents.view', 'parents.create']}>
+            <ParentsPage />
+          </PermissionGate>
         ),
       },
       {
@@ -105,11 +112,9 @@ export const router = createBrowserRouter([
       {
         path: 'settings',
         element: (
-          <PlaceholderPage
-            title="Settings"
-            description="Users, roles, feature flags and custom attributes."
-            eta="Settings ship in M2."
-          />
+          <PermissionGate anyOf={['invitations.send', 'users.view', 'staff.view', 'staff.create']}>
+            <SettingsPage />
+          </PermissionGate>
         ),
       },
       {

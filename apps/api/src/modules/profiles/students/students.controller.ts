@@ -14,7 +14,7 @@ export class StudentsController {
 
   @Get()
   @RequirePermission('students.view')
-  list(@ZodQuery(paginationQuery) q: z.infer<typeof paginationQuery>) {
+  list(@ZodQuery(paginationQuery.extend({ gender: z.string().optional(), classroom: z.string().optional() })) q: z.infer<typeof paginationQuery> & { gender?: string; classroom?: string }) {
     return this.svc.list(q);
   }
 

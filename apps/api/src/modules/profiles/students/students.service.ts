@@ -14,13 +14,15 @@ import {
 export class StudentsService {
   constructor(private readonly prisma: PrismaService, private readonly validator: DynamicValidationService) {}
 
-  async list(q: PaginationQuery) {
+  async list(q: PaginationQuery & { gender?: string; classroom?: string }) {
     const tenantId = requireTenantId();
     const where: any = { tenantId };
     if (q.q) where.OR = [
       { legalName: { contains: q.q, mode: 'insensitive' } },
       { admissionNumber: { contains: q.q, mode: 'insensitive' } },
     ];
+    if (q.gender) where.gender = q.gender;
+    if (q.classroom) where.classroom = { contains: q.classroom, mode: 'insensitive' };
     const [total, data] = await Promise.all([
       this.prisma.student.count({ where }),
       this.prisma.student.findMany({ where, ...buildPagination(q) }),

@@ -21,7 +21,7 @@ export class FleetController {
 
   @Get('vehicles')
   @RequirePermission('vehicles.view')
-  list(@ZodQuery(paginationQuery) q: z.infer<typeof paginationQuery>) {
+  list(@ZodQuery(paginationQuery.extend({ status: z.string().optional(), ownership: z.string().optional() })) q: z.infer<typeof paginationQuery> & { status?: string; ownership?: string }) {
     return this.svc.listVehicles(q);
   }
 

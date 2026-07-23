@@ -5,10 +5,11 @@ import {
   routeInput,
   geofenceInput,
   studentRouteAssignmentInput,
+  paginationQuery,
 } from '@safari-shule/shared-types';
 import { RequirePermission } from '../../rbac/permission.decorators';
 import { Audited } from '../../audit/audit.decorators';
-import { ZodBody } from '../../common/validation/zod-pipe';
+import { ZodBody, ZodQuery } from '../../common/validation/zod-pipe';
 import { RoutesService } from './routes.service';
 
 @ApiTags('routes')
@@ -18,8 +19,8 @@ export class RoutesController {
 
   @Get('routes')
   @RequirePermission('routes.view')
-  list() {
-    return this.svc.listRoutes();
+  list(@ZodQuery(paginationQuery.extend({ isActive: z.string().optional() })) q: z.infer<typeof paginationQuery> & { isActive?: string }) {
+    return this.svc.listRoutes(q);
   }
 
   @Get('routes/:id')
