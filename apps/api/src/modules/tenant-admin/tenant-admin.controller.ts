@@ -11,12 +11,12 @@ const bootstrapSchema = z.object({
   subdomain: z.string().regex(/^[a-z][a-z0-9-]{2,40}$/),
   name: z.string().min(2).max(120),
   contactEmail: z.string().email(),
-  contactPhone: z.string().regex(/^\+\d{7,15}$/).optional(),
+  contactPhone: z.string().regex(/^\+254[17]\d{8}$/).optional(),
   planTier: z.enum(['basic', 'pro', 'enterprise']),
   initialAdmin: z.object({
     email: z.string().email(),
     fullName: z.string().min(2),
-    phone: z.string().regex(/^\+254[17]\d{8}$/).optional(),
+    phone: z.string().trim().regex(/^\+254[17]\d{8}$/, 'Must be a valid Kenyan mobile number, e.g. +254712345678').optional(),
     password: z.string().min(10),
   }),
 });
@@ -24,7 +24,7 @@ const bootstrapSchema = z.object({
 const updateSchema = z.object({
   name: z.string().min(2).max(120).optional(),
   contactEmail: z.string().email().optional(),
-  contactPhone: z.string().regex(/^\+\d{7,15}$/).nullable().optional(),
+  contactPhone: z.string().trim().regex(/^\+254[17]\d{8}$/, 'Must be a valid Kenyan mobile number, e.g. +254712345678').nullable().optional(),
   planTier: z.enum(['basic', 'pro', 'enterprise']).optional(),
 });
 
@@ -41,6 +41,12 @@ export class TenantAdminController {
   @RequirePermission('tenants.manage')
   list() {
     return this.svc.listTenants();
+  }
+
+  @Get(':id')
+  @RequirePermission('tenants.manage')
+  detail(@Param('id') id: string) {
+    return this.svc.getTenantDetail(id);
   }
 
   @Post()

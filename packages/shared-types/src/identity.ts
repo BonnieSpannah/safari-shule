@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { kenyanPhone } from './profiles';
+
 
 /* -------------------------------------------------------------------------- */
 /*  Status enums — mirror the Prisma enums so the client and server agree     */
@@ -70,12 +72,7 @@ export interface MeResponse {
 
 export const updateProfileSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
-  phoneE164: z
-    .string()
-    .trim()
-    .regex(/^\+[1-9]\d{7,14}$/, 'Phone must be E.164 (e.g. +254712345678).')
-    .nullable()
-    .optional(),
+  phoneE164: kenyanPhone.nullable().optional(),
 });
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 

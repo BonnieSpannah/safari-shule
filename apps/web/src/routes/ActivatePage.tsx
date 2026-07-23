@@ -34,6 +34,7 @@ export function ActivatePage() {
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
+    mode: 'onChange',
     defaultValues: { newPassword: '', confirmPassword: '' },
   });
 

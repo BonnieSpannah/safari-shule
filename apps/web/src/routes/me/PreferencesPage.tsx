@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { AxiosError } from 'axios';
@@ -57,6 +58,7 @@ const COMMON_TIMEZONES = [
  */
 export function PreferencesPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const setUiTheme = useUiStore((s) => s.setTheme);
 
   const prefsQuery = useQuery({
@@ -83,6 +85,7 @@ export function PreferencesPage() {
       queryClient.invalidateQueries({ queryKey: ['preferences'] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
       setUiTheme(saved.theme);
+      navigate('/');
     },
     onError: (err) => {
       const message =

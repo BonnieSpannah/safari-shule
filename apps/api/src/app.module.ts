@@ -40,7 +40,7 @@ import { TenantAdminModule } from './modules/tenant-admin/tenant-admin.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, load: [appConfig] }),
+    ConfigModule.forRoot({ isGlobal: true, load: [appConfig], envFilePath: ['../../.env', '.env'] }),
     LoggerModule.forRoot({
       pinoHttp: {
         level: process.env.LOG_LEVEL ?? 'info',

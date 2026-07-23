@@ -10,6 +10,7 @@ import { DashboardPage } from './DashboardPage';
 import { PlaceholderPage } from './PlaceholderPage';
 import { NotFoundPage } from './NotFoundPage';
 import { TenantsPage } from './platform/TenantsPage';
+import { TenantDetailPage } from './platform/TenantDetailPage';
 import { ProfilePage } from './me/ProfilePage';
 import { SecurityPage } from './me/SecurityPage';
 import { PreferencesPage } from './me/PreferencesPage';
@@ -126,6 +127,14 @@ export const router = createBrowserRouter([
         element: (
           <PermissionGate anyOf={['tenants.manage']}>
             <TenantsPage />
+          </PermissionGate>
+        ),
+      },
+      {
+        path: 'platform/tenants/:id',
+        element: (
+          <PermissionGate anyOf={['tenants.manage']}>
+            <TenantDetailPage />
           </PermissionGate>
         ),
       },

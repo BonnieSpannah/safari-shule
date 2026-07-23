@@ -55,6 +55,7 @@ export function LoginPage() {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
+    mode: 'onChange',
     defaultValues: { tenantSlug: initialTenantSlug(), email: '', password: '' },
   });
 

@@ -1,14 +1,15 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow, subDays, startOfDay, endOfDay } from 'date-fns';
 import {
   Building2, Plus, Copy, CheckCircle2, Loader2, X, ChevronRight,
-  MoreHorizontal, Pencil, ShieldOff, ShieldCheck, PauseCircle, Trash2,
+  MoreHorizontal, Pencil, ShieldOff, ShieldCheck, PauseCircle, Trash2, Eye,
+  Search, Filter, ChevronDown, Check, CalendarDays, RotateCcw,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { useNavigate } from 'react-router-dom';
 import {
   listTenants, createTenant, updateTenant, setTenantStatus,
   type PlanTier, type Tenant, type UpdateTenantInput,
@@ -31,8 +33,14 @@ import { hasPermission } from '@/stores/auth.store';
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
-const PHONE_RE = /^\+\d{7,15}$/;
 const SLUG_PATTERN = /^[a-z][a-z0-9-]{1,40}$/;
+// Inline so the correct message shows regardless of baked-in shared-types dist.
+const optionalPhone = z
+  .string()
+  .trim()
+  .regex(/^\+254[17]\d{8}$/, 'Must be a valid Kenyan mobile number, e.g. +254712345678')
+  .or(z.literal(''))
+  .transform((v) => (v === '' ? undefined : v));
 
 const schoolSchema = z.object({
   slug: z.string().min(2, 'At least 2 characters').max(41, 'Too long')
@@ -41,16 +49,14 @@ const schoolSchema = z.object({
     .regex(SLUG_PATTERN, 'Lowercase letters, digits, hyphens; must start with a letter'),
   name: z.string().min(2, 'Enter a school name'),
   contactEmail: z.string().email('Enter a valid email'),
-  contactPhone: z.string().regex(PHONE_RE, 'E.164 format, e.g. +254712000001')
-    .or(z.literal('')).transform((v) => (v === '' ? undefined : v)),
+  contactPhone: optionalPhone,
   planTier: z.enum(['basic', 'pro', 'enterprise'] as const),
 });
 
 const createSchema = schoolSchema.extend({
   adminFullName: z.string().min(2, 'Enter a full name'),
   adminEmail: z.string().email('Enter a valid email'),
-  adminPhone: z.string().regex(PHONE_RE, 'E.164 format, e.g. +254712000001')
-    .or(z.literal('')).transform((v) => (v === '' ? undefined : v)),
+  adminPhone: optionalPhone,
   adminPassword: z.string().min(10, 'At least 10 characters'),
 });
 
@@ -64,7 +70,7 @@ const PLAN_OPTIONS: { value: PlanTier; label: string }[] = [
 
 // ─── Status transition rules ───────────────────────────────────────────────────
 
-type StatusAction = 'activate' | 'suspend' | 'deactivate' | 'delete';
+type StatusAction = 'activate' | 'suspend' | 'deactivate' | 'delete' | 'restore';
 
 const STATUS_ACTIONS: Record<string, StatusAction[]> = {
   active:      ['suspend', 'deactivate', 'delete'],
@@ -72,11 +78,12 @@ const STATUS_ACTIONS: Record<string, StatusAction[]> = {
   deactivated: ['activate', 'delete'],
   pending:     ['activate', 'delete'],
   cancelled:   ['delete'],
-  deleted:     [],
+  deleted:     ['restore'],
 };
 
 const ACTION_META: Record<StatusAction, { label: string; icon: React.ReactNode; danger?: boolean; targetStatus: 'active' | 'suspended' | 'deactivated' | 'deleted' }> = {
   activate:   { label: 'Activate',   icon: <ShieldCheck className="h-4 w-4" />,  targetStatus: 'active' },
+  restore:    { label: 'Restore',    icon: <RotateCcw className="h-4 w-4" />,   targetStatus: 'active' },
   suspend:    { label: 'Suspend',    icon: <PauseCircle className="h-4 w-4" />,  targetStatus: 'suspended' },
   deactivate: { label: 'Deactivate', icon: <ShieldOff className="h-4 w-4" />,   targetStatus: 'deactivated' },
   delete:     { label: 'Delete',     icon: <Trash2 className="h-4 w-4" />,      targetStatus: 'deleted', danger: true },
@@ -87,6 +94,7 @@ const ACTION_META: Record<StatusAction, { label: string; icon: React.ReactNode; 
 export function TenantsPage() {
   const queryClient = useQueryClient();
   const canManage = hasPermission('tenants.manage');
+  const navigate = useNavigate();
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editTenant, setEditTenant] = useState<Tenant | null>(null);
@@ -94,10 +102,68 @@ export function TenantsPage() {
   const [confirmAction, setConfirmAction] = useState<{ tenant: Tenant; action: StatusAction } | null>(null);
   const [lastCreated, setLastCreated] = useState<{ slug: string; adminEmail: string; adminPassword: string } | null>(null);
 
+  // ── Filter / search / pagination state
+  const [search, setSearch] = useState('');
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
+  const [planFilters, setPlanFilters] = useState<string[]>([]);
+  const [createdFrom, setCreatedFrom] = useState<string>(() => format(subDays(new Date(), 30), 'yyyy-MM-dd'));
+  const [createdTo, setCreatedTo] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
+  const [showFilters, setShowFilters] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState<'status' | 'plan' | 'date' | null>(null);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const DATE_PRESETS = [
+    { label: 'Last 7 days', from: format(subDays(new Date(), 7), 'yyyy-MM-dd'), to: todayStr },
+    { label: 'Last 30 days', from: format(subDays(new Date(), 30), 'yyyy-MM-dd'), to: todayStr },
+    { label: 'Last 90 days', from: format(subDays(new Date(), 90), 'yyyy-MM-dd'), to: todayStr },
+    { label: 'All time', from: '', to: '' },
+  ];
+
   const tenantsQuery = useQuery({ queryKey: ['tenants'], queryFn: listTenants, staleTime: 30_000 });
+
+  const filtered = useMemo(() => {
+    const all = tenantsQuery.data ?? [];
+    const q = search.trim().toLowerCase();
+    const from = createdFrom ? startOfDay(new Date(createdFrom)).getTime() : null;
+    const to = createdTo ? endOfDay(new Date(createdTo)).getTime() : null;
+    return all.filter((t) => {
+      if (q && !t.name.toLowerCase().includes(q) && !t.slug.toLowerCase().includes(q) && !t.contactEmail.toLowerCase().includes(q)) return false;
+      if (statusFilters.length > 0 && !statusFilters.includes(t.status)) return false;
+      if (planFilters.length > 0 && !planFilters.includes(t.planTier)) return false;
+      if (from && new Date(t.createdAt).getTime() < from) return false;
+      if (to && new Date(t.createdAt).getTime() > to) return false;
+      return true;
+    });
+  }, [tenantsQuery.data, search, statusFilters, planFilters, createdFrom, createdTo]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const setFilter = (fn: () => void) => { fn(); setPage(1); };
+
+  const toggleStatus = (s: string) => setFilter(() => setStatusFilters((p) => p.includes(s) ? p.filter((x) => x !== s) : [...p, s]));
+  const togglePlan = (p: string) => setFilter(() => setPlanFilters((prev) => prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
+  const defaultFrom = format(subDays(new Date(), 30), 'yyyy-MM-dd');
+  const hasActiveFilters = statusFilters.length > 0 || planFilters.length > 0 || createdFrom !== defaultFrom || createdTo !== todayStr;
+  const resetFilters = () => setFilter(() => { setStatusFilters([]); setPlanFilters([]); setCreatedFrom(defaultFrom); setCreatedTo(todayStr); });
+
+  // Close any open filter dropdown when clicking outside the filter panel
+  const filterPanelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!openDropdown) return;
+    const handler = (e: MouseEvent) => {
+      if (filterPanelRef.current && !filterPanelRef.current.contains(e.target as Node)) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [openDropdown]);
 
   const createForm = useForm<CreateForm>({
     resolver: zodResolver(createSchema),
+    mode: 'onChange',
     defaultValues: {
       slug: '', subdomain: '', name: '', contactEmail: '', contactPhone: '',
       planTier: 'pro', adminFullName: '', adminEmail: '', adminPhone: '', adminPassword: '',
@@ -107,6 +173,7 @@ export function TenantsPage() {
 
   const editForm = useForm<z.infer<typeof schoolSchema>>({
     resolver: zodResolver(schoolSchema),
+    mode: 'onChange',
   });
 
   const slug = watch('slug');
@@ -144,11 +211,19 @@ export function TenantsPage() {
     onError: () => toast.error('Could not update tenant. Please try again.'),
   });
 
+  const STATUS_MESSAGES: Record<StatusAction, string> = {
+    activate:   'Tenant activated.',
+    restore:    'Tenant restored.',
+    suspend:    'Tenant suspended.',
+    deactivate: 'Tenant deactivated.',
+    delete:     'Tenant deleted.',
+  };
+
   const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: 'active' | 'suspended' | 'deactivated' | 'deleted' }) =>
+    mutationFn: ({ id, status }: { id: string; status: 'active' | 'suspended' | 'deactivated' | 'deleted'; action: StatusAction }) =>
       setTenantStatus(id, status),
     onSuccess: async (_, vars) => {
-      toast.success(`Tenant ${vars.status}.`);
+      toast.success(STATUS_MESSAGES[vars.action]);
       setConfirmAction(null);
       await queryClient.invalidateQueries({ queryKey: ['tenants'] });
     },
@@ -197,7 +272,7 @@ export function TenantsPage() {
   return (
     <div>
       <PageHeader
-        title="Tenants"
+        title="Tenants/Schools"
         description="Every school on Safari Shule. Create a new tenant to onboard a school."
         actions={!showCreateForm && canManage && (
           <Button onClick={() => { setShowCreateForm(true); setLastCreated(null); }}>
@@ -255,8 +330,8 @@ export function TenantsPage() {
                   <FormField label="Email" required error={errors.adminEmail?.message}>
                     <Input type="email" placeholder={contactEmail || 'admin@school.ac.ke'} invalid={!!errors.adminEmail} {...register('adminEmail')} />
                   </FormField>
-                  <FormField label="Phone" error={errors.adminPhone?.message} hint="E.164 format, e.g. +254712000001">
-                    <Input type="tel" placeholder="+254712000001" invalid={!!errors.adminPhone} {...register('adminPhone')} />
+                  <FormField label="Phone" error={errors.adminPhone?.message} hint="Valid Kenyan mobile, e.g. +254712345678">
+                    <Input type="tel" placeholder="+254712345678" invalid={!!errors.adminPhone} {...register('adminPhone')} />
                   </FormField>
                   <FormField label="Temporary password" required error={errors.adminPassword?.message} hint="Share securely — admin changes on first login.">
                     <Input type="text" placeholder="At least 10 characters" invalid={!!errors.adminPassword} autoComplete="new-password" {...register('adminPassword')} />
@@ -278,7 +353,7 @@ export function TenantsPage() {
 
       {/* Create preview dialog */}
       <Dialog open={!!preview} onOpenChange={(open) => { if (!open) setPreview(null); }}>
-        <DialogContent hideCloseButton>
+        <DialogContent hideCloseButton className="max-w-2xl">
           <DialogHeader><DialogTitle>Confirm new tenant</DialogTitle></DialogHeader>
           {preview && (
             <div className="space-y-4 text-sm">
@@ -313,8 +388,12 @@ export function TenantsPage() {
 
       {/* Edit dialog */}
       <Dialog open={!!editTenant} onOpenChange={(open) => { if (!open) setEditTenant(null); }}>
-        <DialogContent hideCloseButton className="max-w-2xl">
-          <DialogHeader><DialogTitle>Edit tenant — {editTenant?.name}</DialogTitle></DialogHeader>
+        <DialogContent hideCloseButton className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Edit tenant — {editTenant?.name}</DialogTitle>
+            <p className="text-sm text-muted-foreground">School / tenant details</p>
+            <hr className="mt-1 border-border" />
+          </DialogHeader>
           <form onSubmit={onSubmitEdit} noValidate className="space-y-6">
             <SchoolFields
               register={editForm.register}
@@ -327,14 +406,15 @@ export function TenantsPage() {
               setValue={editForm.setValue}
               readOnlySlug
             />
-            <DialogFooter className="flex items-center justify-between sm:justify-between">
+            <DialogFooter className="flex items-center justify-between border-t border-border pt-4 sm:justify-between">
               <Button type="button" variant="destructive" className="gap-1.5" onClick={() => setEditTenant(null)}>
                 <X className="h-4 w-4" /> Cancel
               </Button>
               <Button type="submit" disabled={updateMutation.isPending}
                 className="gap-1.5 bg-green-600 hover:bg-green-700 focus-visible:ring-green-600">
-                {updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />}
+                {updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 Save changes
+                {!updateMutation.isPending && <ChevronRight className="h-4 w-4" />}
               </Button>
             </DialogFooter>
           </form>
@@ -353,6 +433,8 @@ export function TenantsPage() {
           <p className="text-sm text-muted-foreground">
             {confirmAction?.action === 'delete'
               ? 'This will soft-delete the tenant. Users will be locked out immediately. The record is retained for compliance.'
+              : confirmAction?.action === 'restore'
+              ? 'This will restore the tenant and reactivate all associated users.'
               : confirmAction?.action === 'suspend'
               ? 'Users in this school will be locked out until the tenant is reactivated.'
               : confirmAction?.action === 'deactivate'
@@ -360,15 +442,19 @@ export function TenantsPage() {
               : 'The school will be reactivated and users can sign in again.'}
           </p>
           <DialogFooter className="flex items-center justify-between sm:justify-between">
-            <Button type="button" variant="outline" onClick={() => setConfirmAction(null)}>Cancel</Button>
+            <Button type="button" variant="destructive" className="gap-1.5" onClick={() => setConfirmAction(null)}>
+              <X className="h-4 w-4" /> Cancel
+            </Button>
             <Button
               type="button"
               disabled={statusMutation.isPending}
-              onClick={() => confirmAction && statusMutation.mutate({ id: confirmAction.tenant.id, status: ACTION_META[confirmAction.action].targetStatus })}
-              className={confirmAction?.action === 'delete' || confirmAction?.action === 'suspend' ? 'bg-destructive hover:bg-destructive/90' : 'bg-green-600 hover:bg-green-700'}
+              onClick={() => confirmAction && statusMutation.mutate({ id: confirmAction.tenant.id, status: ACTION_META[confirmAction.action].targetStatus, action: confirmAction.action })}
+              variant={confirmAction?.action === 'activate' || confirmAction?.action === 'restore' ? 'default' : 'destructive'}
+              className={`gap-1.5 ${confirmAction?.action === 'activate' || confirmAction?.action === 'restore' ? 'bg-green-600 hover:bg-green-700 text-white focus-visible:ring-green-600' : ''}`}
             >
-              {statusMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              {statusMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {confirmAction && ACTION_META[confirmAction.action].label}
+              {!statusMutation.isPending && <ChevronRight className="h-4 w-4" />}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -377,10 +463,155 @@ export function TenantsPage() {
       {/* Tenants table */}
       <Card>
         <CardHeader>
-          <CardTitle>All tenants</CardTitle>
-          <CardDescription>
-            {tenantsQuery.data ? `${tenantsQuery.data.length} tenant${tenantsQuery.data.length === 1 ? '' : 's'} on the platform` : 'Loading…'}
-          </CardDescription>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle>All tenants</CardTitle>
+              <CardDescription className="mt-0.5">
+                {tenantsQuery.isLoading ? 'Loading…' : `${filtered.length} of ${tenantsQuery.data?.length ?? 0} tenant${(tenantsQuery.data?.length ?? 0) === 1 ? '' : 's'}`}
+              </CardDescription>
+            </div>
+            {/* Search + filter toggle */}
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              <div className="relative flex-1 sm:w-64">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search name, slug or email…"
+                  value={search}
+                  onChange={(e) => setFilter(() => setSearch(e.target.value))}
+                  className="pl-8 text-sm"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowFilters((v) => !v)}
+                title="Toggle filters"
+                className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-md border transition-colors ${showFilters || hasActiveFilters ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'}`}
+              >
+                <Filter className="h-4 w-4" />
+                {hasActiveFilters && (
+                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-primary" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Collapsible filter panel */}
+          {showFilters && (
+            <div ref={filterPanelRef} className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/30 p-3">
+
+              {/* Status multi-select */}
+              <div className="relative">
+                <button type="button" onClick={() => setOpenDropdown(openDropdown === 'status' ? null : 'status')}
+                  className={`flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors ${statusFilters.length > 0 ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'}`}>
+                  Status {statusFilters.length > 0 && <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">{statusFilters.length}</span>}
+                  <ChevronDown className="h-3 w-3 opacity-60" />
+                </button>
+                {openDropdown === 'status' && (
+                  <div className="absolute left-0 top-full z-20 mt-1 w-44 rounded-lg border border-border bg-card shadow-lg">
+                    <div className="p-1">
+                      {['active', 'pending', 'suspended', 'deactivated', 'cancelled', 'deleted'].map((s) => (
+                        <button key={s} type="button" onClick={() => toggleStatus(s)}
+                          className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs capitalize hover:bg-muted">
+                          <span className={`flex h-3.5 w-3.5 items-center justify-center rounded border ${statusFilters.includes(s) ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'}`}>
+                            {statusFilters.includes(s) && <Check className="h-2.5 w-2.5" />}
+                          </span>
+                          {s}
+                        </button>
+                      ))}
+                      {statusFilters.length > 0 && (
+                        <button type="button" onClick={() => setFilter(() => setStatusFilters([]))}
+                          className="mt-1 w-full rounded px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground border-t border-border pt-2">
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Plan multi-select */}
+              <div className="relative">
+                <button type="button" onClick={() => setOpenDropdown(openDropdown === 'plan' ? null : 'plan')}
+                  className={`flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors ${planFilters.length > 0 ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'}`}>
+                  Plan {planFilters.length > 0 && <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">{planFilters.length}</span>}
+                  <ChevronDown className="h-3 w-3 opacity-60" />
+                </button>
+                {openDropdown === 'plan' && (
+                  <div className="absolute left-0 top-full z-20 mt-1 w-36 rounded-lg border border-border bg-card shadow-lg">
+                    <div className="p-1">
+                      {['basic', 'pro', 'enterprise'].map((p) => (
+                        <button key={p} type="button" onClick={() => togglePlan(p)}
+                          className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs capitalize hover:bg-muted">
+                          <span className={`flex h-3.5 w-3.5 items-center justify-center rounded border ${planFilters.includes(p) ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'}`}>
+                            {planFilters.includes(p) && <Check className="h-2.5 w-2.5" />}
+                          </span>
+                          {p}
+                        </button>
+                      ))}
+                      {planFilters.length > 0 && (
+                        <button type="button" onClick={() => setFilter(() => setPlanFilters([]))}
+                          className="mt-1 w-full rounded px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground border-t border-border pt-2">
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Date range */}
+              <div className="relative">
+                <button type="button" onClick={() => setOpenDropdown(openDropdown === 'date' ? null : 'date')}
+                  className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  {createdFrom && createdTo ? `${format(new Date(createdFrom + 'T12:00:00'), 'd MMM')} – ${format(new Date(createdTo + 'T12:00:00'), 'd MMM yyyy')}` : createdFrom ? `From ${format(new Date(createdFrom + 'T12:00:00'), 'd MMM yyyy')}` : 'All time'}
+                  <ChevronDown className="h-3 w-3 opacity-60" />
+                </button>
+                {openDropdown === 'date' && (
+                  <div className="absolute left-0 top-full z-20 mt-1 w-72 rounded-lg border border-border bg-card shadow-lg">
+                    <div className="p-3 space-y-3">
+                      <div className="grid grid-cols-2 gap-1">
+                        {DATE_PRESETS.map((preset) => {
+                          const active = createdFrom === preset.from && createdTo === preset.to;
+                          return (
+                            <button key={preset.label} type="button"
+                              onClick={() => setFilter(() => { setCreatedFrom(preset.from); setCreatedTo(preset.to); })}
+                              className={`rounded px-2 py-1.5 text-xs font-medium transition-colors text-left ${active ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
+                              {preset.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="border-t border-border pt-2 space-y-2">
+                        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Custom range</p>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1">
+                            <label className="block text-[10px] text-muted-foreground mb-0.5">From</label>
+                            <input type="date" value={createdFrom} max={createdTo || undefined}
+                              onChange={(e) => setFilter(() => setCreatedFrom(e.target.value))}
+                              className="w-full rounded border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring" />
+                          </div>
+                          <div className="flex-1">
+                            <label className="block text-[10px] text-muted-foreground mb-0.5">To</label>
+                            <input type="date" value={createdTo} min={createdFrom || undefined}
+                              onChange={(e) => setFilter(() => setCreatedTo(e.target.value))}
+                              className="w-full rounded border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {hasActiveFilters && (
+                <button type="button" onClick={resetFilters}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground ml-1">
+                  <X className="h-3 w-3" /> Reset all
+                </button>
+              )}
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {tenantsQuery.isLoading && <ListSkeleton />}
@@ -390,32 +621,50 @@ export function TenantsPage() {
             </div>
           )}
           {tenantsQuery.data?.length === 0 && <EmptyState />}
-          {tenantsQuery.data && tenantsQuery.data.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
-                    <th className="py-3 pr-6 font-medium">School</th>
-                    <th className="py-3 pr-6 font-medium">Plan</th>
-                    <th className="py-3 pr-6 font-medium">Contact</th>
-                    <th className="py-3 pr-6 font-medium">Since</th>
-                    <th className="py-3 pr-6 font-medium">Status</th>
-                    <th className="py-3 font-medium"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tenantsQuery.data.map((t) => (
-                    <TenantRow
-                      key={t.id}
-                      tenant={t}
-                      canManage={canManage}
-                      onEdit={() => openEdit(t)}
-                      onAction={(action) => setConfirmAction({ tenant: t, action })}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          {!tenantsQuery.isLoading && tenantsQuery.data && tenantsQuery.data.length > 0 && filtered.length === 0 && (
+            <div className="py-10 text-center text-sm text-muted-foreground">No tenants match your filters.</div>
+          )}
+          {paginated.length > 0 && (
+            <>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+                      <th className="py-3 pr-6 font-medium">Tenant/School</th>
+                      <th className="py-3 pr-6 font-medium">Plan</th>
+                      <th className="py-3 pr-6 font-medium">Contact</th>
+                      <th className="py-3 pr-6 font-medium">Since</th>
+                      <th className="py-3 pr-6 font-medium">Status</th>
+                      <th className="py-3 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginated.map((t) => (
+                      <TenantRow
+                        key={t.id}
+                        tenant={t}
+                        canManage={canManage}
+                        onView={() => navigate(`/platform/tenants/${t.id}`)}
+                        onEdit={() => openEdit(t)}
+                        onAction={(action) => setConfirmAction({ tenant: t, action })}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {totalPages > 1 && (
+                <div className="mt-4 flex items-center justify-between border-t border-border pt-3 text-sm text-muted-foreground">
+                  <span className="text-xs">{((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
+                  <div className="flex items-center gap-1">
+                    <button type="button" disabled={page === 1} onClick={() => setPage((p) => p - 1)}
+                      className="rounded px-2.5 py-1 text-xs font-medium hover:bg-muted disabled:opacity-40">← Prev</button>
+                    <span className="px-2 text-xs">{page} / {totalPages}</span>
+                    <button type="button" disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}
+                      className="rounded px-2.5 py-1 text-xs font-medium hover:bg-muted disabled:opacity-40">Next →</button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
@@ -428,11 +677,10 @@ export function TenantsPage() {
 function SchoolFields({
   register, control, errors, slug, contactEmail, currentSubdomain, currentAdminEmail, setValue, readOnlySlug,
 }: {
-  register: ReturnType<typeof useForm>['register'];
-  control: ReturnType<typeof useForm>['control'];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  register: any; control: any; setValue: any;
   errors: Record<string, { message?: string } | undefined>;
   slug: string; contactEmail: string; currentSubdomain: string; currentAdminEmail: string;
-  setValue: ReturnType<typeof useForm>['setValue'];
   readOnlySlug?: boolean;
 }) {
   return (
@@ -465,8 +713,8 @@ function SchoolFields({
             onBlur={(e) => { if (!currentAdminEmail && e.target.value) setValue('adminEmail', e.target.value); }}
           />
         </FormField>
-        <FormField label="Contact phone" error={errors.contactPhone?.message} hint="E.164 format, e.g. +254712000001">
-          <Input type="tel" placeholder="+254712000001" invalid={!!errors.contactPhone} {...register('contactPhone')} />
+        <FormField label="Contact phone" error={errors.contactPhone?.message} hint="Valid Kenyan mobile, e.g. +254712345678">
+          <Input type="tel" placeholder="+254712345678" invalid={!!errors.contactPhone} {...register('contactPhone')} />
         </FormField>
       </div>
     </section>
@@ -475,9 +723,10 @@ function SchoolFields({
 
 // ─── Table row ────────────────────────────────────────────────────────────────
 
-function TenantRow({ tenant: t, canManage, onEdit, onAction }: {
+function TenantRow({ tenant: t, canManage, onView, onEdit, onAction }: {
   tenant: Tenant;
   canManage: boolean;
+  onView: () => void;
   onEdit: () => void;
   onAction: (action: StatusAction) => void;
 }) {
@@ -513,9 +762,14 @@ function TenantRow({ tenant: t, canManage, onEdit, onAction }: {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem onSelect={onEdit} className="gap-2">
-                <Pencil className="h-4 w-4" /> Edit details
+              <DropdownMenuItem onSelect={onView} className="gap-2">
+                <Eye className="h-4 w-4" /> View
               </DropdownMenuItem>
+              {t.status !== 'deleted' && (
+                <DropdownMenuItem onSelect={onEdit} className="gap-2">
+                  <Pencil className="h-4 w-4" /> Edit
+                </DropdownMenuItem>
+              )}
               {availableActions.length > 0 && <DropdownMenuSeparator />}
               {availableActions.map((action) => {
                 const meta = ACTION_META[action];

@@ -189,6 +189,7 @@ model Tenant {
   suspendedAt  DateTime?
   cancelledAt  DateTime?
   deletedAt    DateTime?
+  restoredAt   DateTime?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 

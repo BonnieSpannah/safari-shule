@@ -9,14 +9,14 @@ import { PaymentsService } from './payments.service';
 const fuelInitiate = z.object({
   fuelLogId: z.string().uuid(),
   amountKes: z.number().int().positive(),
-  phoneE164: z.string().regex(/^\+254[17]\d{8}$/),
+  phoneE164: z.string().trim().regex(/^\+254[17]\d{8}$/, 'Must be a valid Kenyan mobile number, e.g. +254712345678'),
   description: z.string().max(120).default('Fuel payment'),
 });
 
 const repairInitiate = z.object({
   repairLogId: z.string().uuid(),
   amountKes: z.number().int().positive(),
-  phoneE164: z.string().regex(/^\+254[17]\d{8}$/),
+  phoneE164: z.string().trim().regex(/^\+254[17]\d{8}$/, 'Must be a valid Kenyan mobile number, e.g. +254712345678'),
   description: z.string().max(120).default('Repair payment'),
 });
 

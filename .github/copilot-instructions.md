@@ -31,6 +31,22 @@ infra/                    docker-compose stacks, prometheus, grafana
 6. **No comments unless the WHY is non-obvious.** No file-header docstrings. No "added for X" comments.
 7. **Auth.** Passwords are argon2id via `hashPassword`/`verifyPassword`. JWT access 15m, refresh 7d with `jti` reuse-detection.
 
+## Development workflow (preferred: native API + Docker infra)
+
+Run infrastructure in Docker, API and web natively — **no image rebuild needed** for code changes:
+
+```bash
+make infra               # postgres + redis + mailhog in Docker
+make api-dev             # NestJS watch mode (~2s reload on save)
+make web-dev             # Vite HMR (<1s reload on save)
+```
+
+Full Docker stack (CI-parity, use for validating the production image):
+
+```bash
+make up                  # build + start everything in Docker
+```
+
 ## Common commands (run from repo root)
 
 ```bash
@@ -39,9 +55,11 @@ pnpm --filter @safari-shule/api run build          # NestJS build (must exit 0)
 pnpm --filter @safari-shule/api exec tsc --noEmit  # Typecheck only
 pnpm --filter @safari-shule/api exec tsc --noEmit -p test/tsconfig.test.json
 pnpm --filter @safari-shule/api run test:e2e       # Jest e2e
-make up                                            # docker compose up postgres+redis+api
-make db:migrate
-make db:seed                                       # Seeds 'hillcrest' demo tenant
+make infra                                         # docker compose up postgres+redis (no API)
+make db-migrate                                    # prisma migrate deploy (local)
+make db-migrate-new NAME=add_xyz                   # prisma migrate dev --name add_xyz (interactive)
+make db-generate                                   # prisma generate (after schema changes)
+make db-seed-local                                 # seed hillcrest demo tenant natively
 ```
 
 ## Global request pipeline (apps/api)

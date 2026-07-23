@@ -9,7 +9,7 @@ export type ParentRelation = (typeof PARENT_RELATIONS)[number];
 export const kenyanPhone = z
   .string()
   .trim()
-  .regex(/^\+254[17]\d{8}$/, 'Must be a +254 phone number (Safaricom/Airtel format)');
+  .regex(/^\+254[17]\d{8}$/, 'Must be a valid Kenyan mobile number, e.g. +254712345678');
 
 export const baseProfileSchema = z.object({
   legalName: z.string().min(2).max(120),

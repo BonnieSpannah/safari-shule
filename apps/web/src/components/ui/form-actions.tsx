@@ -45,36 +45,38 @@ export function FormActions({
   return (
     <div
       className={cn(
-        'flex items-center justify-end gap-2 border-t border-border bg-surface-1/95 px-4 py-3 backdrop-blur',
+        'flex items-center justify-between gap-2 border-t border-border bg-surface-1/95 px-4 py-3 backdrop-blur',
         sticky && 'sticky bottom-0 z-10 -mx-6 mt-6 px-6',
         className,
       )}
       {...rest}
     >
-      {onCancel && (
+      {onCancel ? (
         <Button
           type="button"
-          variant="ghost"
+          variant="destructive"
           onClick={onCancel}
           disabled={submitting}
-          className="text-danger hover:bg-danger/10 hover:text-danger"
+          className="gap-1.5"
         >
           <X className="h-4 w-4" />
           {cancelLabel}
         </Button>
+      ) : (
+        <span />
       )}
       <Button
         type="submit"
         form={formId}
         disabled={disabled || submitting}
+        className="gap-1.5 bg-green-600 hover:bg-green-700 focus-visible:ring-green-600"
         {...submitButtonProps}
       >
         {submitting ? (
           <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          SubmitIcon && <SubmitIcon className="h-4 w-4" />
-        )}
+        ) : null}
         {submitLabel}
+        {!submitting && SubmitIcon && <SubmitIcon className="h-4 w-4" />}
       </Button>
     </div>
   );

@@ -1,14 +1,25 @@
 import { useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { AxiosError } from 'axios';
 import { AlertTriangle, KeyRound, ShieldCheck } from 'lucide-react';
-import {
-  updateProfileSchema,
-  type UpdateProfileInput,
-} from '@safari-shule/shared-types';
+import { type UpdateProfileInput } from '@safari-shule/shared-types';
+
+// Local schema so the phone message stays consistent with the rest of the platform
+// regardless of the baked-in shared-types dist version.
+const profileFormSchema = z.object({
+  fullName: z.string().trim().min(2, 'Enter your full name').max(120),
+  phoneE164: z
+    .string()
+    .trim()
+    .regex(/^\+254[17]\d{8}$/, 'Must be a valid Kenyan mobile number, e.g. +254712345678')
+    .nullable()
+    .optional(),
+});
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +41,7 @@ import { humanizeRole } from '@/lib/roles';
  * age (with prominent nudge when close to expiry or forced to change).
  */
 export function ProfilePage() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const cached = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
@@ -43,7 +55,8 @@ export function ProfilePage() {
   const me = meQuery.data;
 
   const form = useForm<UpdateProfileInput>({
-    resolver: zodResolver(updateProfileSchema),
+    resolver: zodResolver(profileFormSchema),
+    mode: 'onChange',
     values: {
       fullName: me?.fullName ?? '',
       phoneE164: me?.phoneE164 ?? '',
@@ -71,6 +84,7 @@ export function ProfilePage() {
         });
       }
       queryClient.invalidateQueries({ queryKey: ['me'] });
+      navigate('/');
     },
     onError: (err) => {
       const message =
@@ -93,7 +107,7 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div>
       <PageHeader
         title="Your profile"
         description="Update your name and phone. Contact your school administrator to change your email."
@@ -134,12 +148,12 @@ export function ProfilePage() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
         {/* Editable profile card */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Personal details</CardTitle>
-            <CardDescription>These are visible to your school administrator.</CardDescription>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="mb-3">Personal details</CardTitle>
+            <hr className="border-border" />
           </CardHeader>
           <CardContent>
             <form
@@ -169,7 +183,7 @@ export function ProfilePage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="phone">Phone (E.164)</Label>
+                <Label htmlFor="phone">Phone</Label>
                 <Input
                   id="phone"
                   placeholder="+254712345678"
@@ -181,7 +195,7 @@ export function ProfilePage() {
                   <p className="text-xs text-danger">{form.formState.errors.phoneE164.message}</p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Used for SMS alerts and OTP sign-in. Leave blank to remove.
+                  Valid Kenyan mobile, e.g. +254712345678. Used for SMS alerts and OTP sign-in.
                 </p>
               </div>
             </form>
@@ -198,11 +212,11 @@ export function ProfilePage() {
 
         {/* Read-only identity card */}
         <Card>
-          <CardHeader>
-            <CardTitle>Account</CardTitle>
-            <CardDescription>Read-only identity information.</CardDescription>
+          <CardHeader className="pb-3">
+            <CardTitle className="mb-3">Account</CardTitle>
+            <hr className="border-border" />
           </CardHeader>
-          <CardContent className="space-y-4 text-sm">
+          <CardContent className="space-y-3 text-sm">
             <ReadRow label="Status">
               <StatusBadge status={me.status ?? 'active'} />
             </ReadRow>
@@ -242,9 +256,9 @@ export function ProfilePage() {
 
 function ReadRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-3">
-      <span className="text-xs uppercase tracking-wider text-muted-foreground">{label}</span>
-      <span className="text-right text-sm">{children}</span>
+    <div className="space-y-0.5">
+      <dt className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</dt>
+      <dd className="text-sm">{children}</dd>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -46,6 +47,7 @@ import { useAuthStore } from '@/stores/auth.store';
  */
 export function SecurityPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const refreshToken = useAuthStore((s) => s.refreshToken);
   const [tokenHash, setTokenHash] = useState<string | null>(null);
 
@@ -116,6 +118,7 @@ function ChangePasswordCard({
 }) {
   const form = useForm<ChangePasswordInput>({
     resolver: zodResolver(changePasswordSchema),
+    mode: 'onChange',
     defaultValues: { currentPassword: '', newPassword: '', confirmPassword: '' },
   });
 
@@ -127,6 +130,7 @@ function ChangePasswordCard({
     onSuccess: () => {
       toast.success('Password updated.');
       form.reset({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      navigate('/');
     },
     onError: (err) => {
       const message =

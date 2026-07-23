@@ -16,6 +16,7 @@ import { api } from '@/lib/api/client';
 export function ForgotPasswordPage() {
   const form = useForm<ForgotPasswordInput>({
     resolver: zodResolver(forgotPasswordSchema),
+    mode: 'onChange',
     defaultValues: { tenantSlug: '', email: '' },
   });
 

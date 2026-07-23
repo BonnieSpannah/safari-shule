@@ -38,11 +38,11 @@ const loginSchema = z.object({
 const refreshSchema = z.object({ refreshToken: z.string().min(20) });
 
 const otpRequestSchema = z.object({
-  phone: z.string().regex(/^\+254[17]\d{8}$/),
+  phone: z.string().trim().regex(/^\+254[17]\d{8}$/, 'Must be a valid Kenyan mobile number, e.g. +254712345678'),
 });
 
 const otpVerifySchema = z.object({
-  phone: z.string().regex(/^\+254[17]\d{8}$/),
+  phone: z.string().trim().regex(/^\+254[17]\d{8}$/, 'Must be a valid Kenyan mobile number, e.g. +254712345678'),
   code: z.string().regex(/^\d{6}$/),
 });
 

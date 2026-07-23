@@ -49,6 +49,111 @@ export class TenantAdminService {
     );
   }
 
+  getTenantDetail(id: string) {
+    return runWithBypass(() =>
+      this.prisma.tenant.findUniqueOrThrow({
+        where: { id },
+        include: {
+          _count: {
+            select: {
+              users: true,
+              staff: true,
+              students: true,
+              vehicles: true,
+              routes: true,
+            },
+          },
+          users: {
+            orderBy: { createdAt: 'desc' },
+            take: 30,
+            select: {
+              id: true,
+              email: true,
+              fullName: true,
+              phoneE164: true,
+              status: true,
+              createdAt: true,
+              lastLoginAt: true,
+              userRoles: {
+                select: { role: { select: { key: true, label: true } } },
+              },
+            },
+          },
+          students: {
+            orderBy: { createdAt: 'desc' },
+            take: 50,
+            select: {
+              id: true,
+              legalName: true,
+              admissionNumber: true,
+              classroom: true,
+              gender: true,
+              dateOfBirth: true,
+              createdAt: true,
+              parents: {
+                take: 1,
+                select: {
+                  relation: true,
+                  parent: { select: { legalName: true, phoneE164: true } },
+                },
+              },
+            },
+          },
+          staff: {
+            orderBy: { createdAt: 'desc' },
+            take: 30,
+            select: {
+              id: true,
+              legalName: true,
+              employeeNumber: true,
+              position: true,
+              phoneE164: true,
+              email: true,
+              gender: true,
+              createdAt: true,
+            },
+          },
+          vehicles: {
+            orderBy: { createdAt: 'desc' },
+            take: 50,
+            select: {
+              id: true,
+              registration: true,
+              make: true,
+              model: true,
+              year: true,
+              capacity: true,
+              ownership: true,
+              status: true,
+              createdAt: true,
+            },
+          },
+          routes: {
+            orderBy: { createdAt: 'desc' },
+            take: 50,
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              isActive: true,
+              createdAt: true,
+              _count: {
+                select: { busStops: true, studentAssignments: true },
+              },
+              assignments: {
+                orderBy: { validFrom: 'desc' },
+                take: 1,
+                select: {
+                  vehicle: { select: { make: true, model: true, registration: true } },
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+  }
+
   updateTenant(
     id: string,
     input: { name?: string; contactEmail?: string; contactPhone?: string | null; planTier?: string },
@@ -66,10 +171,14 @@ export class TenantAdminService {
     );
   }
 
-  setTenantStatus(id: string, status: 'active' | 'suspended' | 'deactivated' | 'deleted') {
+  async setTenantStatus(id: string, status: 'active' | 'suspended' | 'deactivated' | 'deleted') {
     const now = new Date();
+    const current = await runWithBypass(() =>
+      this.prisma.tenant.findUnique({ where: { id }, select: { deletedAt: true } }),
+    );
+    const isRestore = status === 'active' && current?.deletedAt != null;
     const extra: Record<string, unknown> = {
-      active: { isActive: true, activatedAt: now, suspendedAt: null },
+      active: { isActive: true, activatedAt: now, suspendedAt: null, deletedAt: null, ...(isRestore ? { restoredAt: now } : {}) },
       suspended: { isActive: false, suspendedAt: now },
       deactivated: { isActive: false, suspendedAt: null },
       deleted: { isActive: false, deletedAt: now },

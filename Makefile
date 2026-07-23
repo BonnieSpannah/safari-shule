@@ -2,6 +2,8 @@ SHELL := /bin/bash
 COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 
 .PHONY: help bootstrap preflight uat-refresh up down logs ps restart migrate migrate-create seed reset \
+        infra api-dev web-dev dev \
+        db-generate db-migrate db-migrate-new db-seed-local db-studio \
         api-shell db-shell redis-shell test lint format clean \
         backup backup-list backup-verify restore-isolated db-masked-dump \
         access-grant access-revoke dnc-check retention-run
@@ -23,6 +25,47 @@ bootstrap-old: ## Legacy manual bootstrap (pnpm install only)
 
 up: ## Bring up the full stack (postgres, pgbouncer, redis, prometheus, grafana, glitchtip, api, web)
 	$(COMPOSE) up -d --build
+
+infra: ## Start only infrastructure (postgres, pgbouncer, redis, mailhog) — use alongside native API/web dev
+	$(COMPOSE) up -d postgres pgbouncer redis mailhog
+
+# ─── Native dev (no Docker rebuild needed for code changes) ──────────────────
+# Prerequisites: `make infra` must be running first.
+
+dev: infra ## Start infra + print instructions for native API/web hot-reload
+	@echo ""
+	@echo "  Infrastructure is up. In separate terminals run:"
+	@echo "    make api-dev   → NestJS watch mode  (reloads in ~2s on save)"
+	@echo "    make web-dev   → Vite HMR            (reloads in <1s on save)"
+	@echo ""
+
+api-dev: ## Run API in watch mode — stops Docker API first, then hot-reloads on save (~2s)
+	@echo "→ Stopping Docker API container (if running) to free port 3000…"
+	-$(COMPOSE) stop api 2>/dev/null
+	@echo "→ Starting native API in watch mode…"
+	pnpm --filter @safari-shule/api run dev
+
+web-dev: ## Run web (Vite) natively — fastest HMR
+	pnpm --filter @safari-shule/web run dev
+
+# ─── Local Prisma operations (run natively, not inside the API container) ────
+
+db-generate: ## Regenerate Prisma client after any schema.prisma change
+	pnpm --filter @safari-shule/api exec prisma generate
+
+db-migrate: ## Apply all pending migrations locally (safe, never resets data)
+	pnpm --filter @safari-shule/api exec prisma migrate deploy
+
+db-migrate-new: ## Create + apply a new migration (NAME=add_something)
+	pnpm --filter @safari-shule/api exec prisma migrate dev --name $(NAME)
+
+db-seed-local: ## Seed demo tenant + fixtures natively
+	pnpm --filter @safari-shule/api run db:seed
+
+db-studio: ## Open Prisma Studio in browser
+	pnpm --filter @safari-shule/api exec prisma studio
+
+# ─── Container-based operations (used in CI / staging / prod) ────────────────
 
 down: ## Stop the stack (preserves volumes)
 	$(COMPOSE) down

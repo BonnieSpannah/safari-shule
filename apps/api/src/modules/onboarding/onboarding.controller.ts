@@ -11,7 +11,7 @@ import { ROLE_KEYS } from '@safari-shule/shared-types';
 const inviteSchema = z.object({
   email: z.string().email(),
   fullName: z.string().min(2),
-  phone: z.string().regex(/^\+254[17]\d{8}$/).optional(),
+  phone: z.string().trim().regex(/^\+254[17]\d{8}$/, 'Must be a valid Kenyan mobile number, e.g. +254712345678').optional(),
   roleKeys: z.array(z.enum(ROLE_KEYS as unknown as [string, ...string[]])).min(1),
 });
 
