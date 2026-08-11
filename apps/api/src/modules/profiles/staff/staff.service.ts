@@ -24,7 +24,7 @@ export class StaffService {
   }
 
   async byId(id: string) {
-    const row = await this.prisma.staff.findFirst({ where: { id } });
+    const row = await this.prisma.staff.findFirst({ where: { id, tenantId: requireTenantId() } });
     if (!row) throw new NotFoundException();
     return row;
   }
@@ -51,7 +51,7 @@ export class StaffService {
 
   async update(id: string, patch: Partial<StaffInput>) {
     const tenantId = requireTenantId();
-    const existing = await this.prisma.staff.findFirst({ where: { id } });
+    const existing = await this.prisma.staff.findFirst({ where: { id, tenantId } });
     if (!existing) throw new NotFoundException();
     const flex = patch.flexibleAttributes
       ? await this.validator.validateAndNormalize(tenantId, 'staff', patch.flexibleAttributes)

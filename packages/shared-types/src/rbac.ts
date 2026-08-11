@@ -91,6 +91,9 @@ export const PERMISSION_KEYS = [
   // Payments
   'payments.view',
   'payments.initiate',
+
+  // Dashboard
+  'dashboard.view',
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
@@ -120,6 +123,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, readonly PermissionKey[]>
     'incidents.view', 'incidents.acknowledge', 'incidents.resolve',
     'notifications.view', 'notifications.broadcast',
     'payments.view', 'payments.initiate',
+    'dashboard.view',
   ],
   driver: [
     'students.view',

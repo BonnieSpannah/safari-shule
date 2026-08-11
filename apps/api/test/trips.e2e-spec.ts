@@ -76,9 +76,8 @@ describe('Trips — GET /v1/trips (e2e)', () => {
       .set('x-tenant-id', beta.tenantId);
 
     // Totals must be per-tenant, not combined
-    expect(alphaRes.body.meta.total).not.toBeGreaterThan(
-      alphaRes.body.meta.total + betaRes.body.meta.total + 1, // allows for seeded extras
-    );
+    expect(alphaRes.body.meta.total).toBeGreaterThanOrEqual(1); // alpha has the seeded trip
+    expect(betaRes.body.meta.total).toBe(0);                    // beta has none
   });
 
   it('status filter returns only matching trips', async () => {
@@ -99,7 +98,7 @@ describe('Trips — GET /v1/trips (e2e)', () => {
       .set('Authorization', `Bearer ${alpha.driverAccessToken}`)
       .set('x-tenant-id', alpha.tenantId);
 
-    // Driver has trips.live_track but not trips.view — expect 403
-    expect([200, 403]).toContain(res.status); // accept either; depends on seed role config
+    // Driver role has trips.view — expect 200
+    expect(res.status).toBe(200);
   });
 });

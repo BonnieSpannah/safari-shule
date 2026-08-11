@@ -439,6 +439,7 @@ export const LEGACY_PERMISSIONS = [
   'caretakers.delete',
   'caretakers.edit',
   'caretakers.view',
+  'dashboard.view',
   'feature_flags.manage',
   'fuel_logs.approve',
   'fuel_logs.create',

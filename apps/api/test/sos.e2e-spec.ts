@@ -82,7 +82,6 @@ describe('SOS incident flow (e2e)', () => {
       .set('Authorization', `Bearer ${tenant.driverAccessToken}`)
       .set('x-tenant-id', tenant.tenantId)
       .send({
-        tripId,
         description: 'Vehicle stopped, hazard lights on, driver requesting help.',
         location: { lat: -1.2864, lng: 36.8219 },
       });
@@ -115,7 +114,6 @@ describe('SOS incident flow (e2e)', () => {
       .set('Authorization', `Bearer ${tenant.driverAccessToken}`)
       .set('x-tenant-id', tenant.tenantId)
       .send({
-        tripId,
         description: 'Test - no contacts',
         location: { lat: -1.2864, lng: 36.8219 },
       });

@@ -32,7 +32,7 @@ export class StudentsService {
 
   async byId(id: string) {
     const row = await this.prisma.student.findFirst({
-      where: { id },
+      where: { id, tenantId: requireTenantId() },
       include: { parents: { include: { parent: true } }, caretakers: { include: { caretaker: true } } },
     });
     if (!row) throw new NotFoundException();
@@ -59,7 +59,7 @@ export class StudentsService {
 
   async update(id: string, patch: Partial<StudentInput>) {
     const tenantId = requireTenantId();
-    const existing = await this.prisma.student.findFirst({ where: { id } });
+    const existing = await this.prisma.student.findFirst({ where: { id, tenantId } });
     if (!existing) throw new NotFoundException();
     const flex = patch.flexibleAttributes
       ? await this.validator.validateAndNormalize(tenantId, 'student', patch.flexibleAttributes)

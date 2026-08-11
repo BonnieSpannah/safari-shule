@@ -22,7 +22,6 @@ export const incidentReportInput = z.object({
 export type IncidentReportInput = z.infer<typeof incidentReportInput>;
 
 export const sosInput = z.object({
-  tripId: z.string().uuid(),
   description: z.string().max(500).optional(),
   location: z
     .object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) })

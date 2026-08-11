@@ -33,7 +33,7 @@ export class FleetService {
   }
 
   async vehicle(id: string) {
-    const row = await this.prisma.vehicle.findFirst({ where: { id } });
+    const row = await this.prisma.vehicle.findFirst({ where: { id, tenantId: requireTenantId() } });
     if (!row) throw new NotFoundException();
     return row;
   }

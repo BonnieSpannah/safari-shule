@@ -2,6 +2,7 @@ import { Controller, Get } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { requireTenantId } from '../../common/context/request-context';
+import { RequirePermission } from '../../rbac/permission.decorators';
 
 @ApiTags('dashboard')
 @Controller('dashboard')
@@ -9,6 +10,7 @@ export class DashboardController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Get('stats')
+  @RequirePermission('dashboard.view')
   async stats() {
     const tenantId = requireTenantId();
     const today = new Date();

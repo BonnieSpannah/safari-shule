@@ -25,7 +25,7 @@ export class ParentsService {
 
   async byId(id: string) {
     const row = await this.prisma.parent.findFirst({
-      where: { id },
+      where: { id, tenantId: requireTenantId() },
       include: { students: { include: { student: true } } },
     });
     if (!row) throw new NotFoundException();
@@ -53,7 +53,7 @@ export class ParentsService {
 
   async update(id: string, patch: Partial<ParentInput>) {
     const tenantId = requireTenantId();
-    const existing = await this.prisma.parent.findFirst({ where: { id } });
+    const existing = await this.prisma.parent.findFirst({ where: { id, tenantId } });
     if (!existing) throw new NotFoundException();
     const flex = patch.flexibleAttributes
       ? await this.validator.validateAndNormalize(tenantId, 'parent', patch.flexibleAttributes)
