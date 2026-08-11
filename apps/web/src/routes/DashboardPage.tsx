@@ -1,25 +1,40 @@
-import { Bus, Route as RouteIcon, Users, Siren } from 'lucide-react';
+import { Bus, Route as RouteIcon, Users, Siren, GraduationCap, UserCog, CalendarCheck, MapPin } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAuthStore } from '@/stores/auth.store';
+import { getDashboardStats } from '@/lib/api/dashboard';
 
-interface Stat {
-  label: string;
-  value: string | number;
-  hint: string;
-  icon: React.ComponentType<{ className?: string }>;
-  tone: 'primary' | 'accent' | 'info' | 'danger';
-}
+const TONE_CLASSES: Record<string, string> = {
+  blue: 'bg-blue-500/10 text-blue-600',
+  emerald: 'bg-emerald-500/10 text-emerald-600',
+  violet: 'bg-violet-500/10 text-violet-600',
+  amber: 'bg-amber-500/10 text-amber-600',
+  rose: 'bg-rose-500/10 text-rose-600',
+  sky: 'bg-sky-500/10 text-sky-600',
+  orange: 'bg-orange-500/10 text-orange-600',
+};
 
 export function DashboardPage() {
   const user = useAuthStore((s) => s.user);
 
-  const stats: Stat[] = [
-    { label: 'Active vehicles', value: '—', hint: 'On duty right now', icon: Bus, tone: 'primary' },
-    { label: 'Live trips', value: '—', hint: 'Being tracked live', icon: RouteIcon, tone: 'accent' },
-    { label: 'Students on board', value: '—', hint: 'Scanned in this morning', icon: Users, tone: 'info' },
-    { label: 'Open incidents', value: '—', hint: 'Awaiting acknowledgement', icon: Siren, tone: 'danger' },
+  const statsQuery = useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: getDashboardStats,
+    refetchInterval: 30_000,
+  });
+  const s = statsQuery.data;
+
+  const stats = [
+    { label: 'Active users', value: s?.users ?? '—', hint: 'System accounts', icon: Users, color: 'blue', to: '/settings' },
+    { label: 'Students', value: s?.students ?? '—', hint: 'Enrolled', icon: GraduationCap, color: 'emerald', to: '/students' },
+    { label: 'Staff', value: s?.staff ?? '—', hint: 'On record', icon: UserCog, color: 'violet', to: '/settings' },
+    { label: 'Active vehicles', value: s?.vehicles ?? '—', hint: 'In service', icon: Bus, color: 'amber', to: '/fleet' },
+    { label: 'Active routes', value: s?.routes ?? '—', hint: 'Running today', icon: RouteIcon, color: 'sky', to: '/routes' },
+    { label: "Today's trips", value: s?.tripsToday ?? '—', hint: 'Scheduled today', icon: CalendarCheck, color: 'orange', to: '/trips' },
+    { label: 'Open incidents', value: s?.incidentsOpen ?? '—', hint: 'Awaiting resolution', icon: Siren, color: 'rose', to: '/incidents' },
   ];
 
   return (
@@ -29,30 +44,20 @@ export function DashboardPage() {
         description="Live overview of your school's transport operation."
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map(({ label, value, hint, icon: Icon, tone }) => (
-          <Card key={label}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-              <div
-                className={
-                  tone === 'primary'
-                    ? 'flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary'
-                    : tone === 'accent'
-                    ? 'flex h-8 w-8 items-center justify-center rounded-md bg-accent/15 text-accent-foreground'
-                    : tone === 'info'
-                    ? 'flex h-8 w-8 items-center justify-center rounded-md bg-info/10 text-info'
-                    : 'flex h-8 w-8 items-center justify-center rounded-md bg-danger/10 text-danger'
-                }
-              >
-                <Icon className="h-4 w-4" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold">{value}</div>
-              <CardDescription>{hint}</CardDescription>
-            </CardContent>
-          </Card>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+        {stats.map(({ label, value, hint, icon: Icon, color, to }) => (
+          <Link key={label} to={to} className="group">
+            <Card className="transition-shadow group-hover:shadow-md">
+              <CardContent className="flex flex-col gap-2 p-4">
+                <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${TONE_CLASSES[color]}`}>
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="text-2xl font-bold leading-none">{value}</div>
+                <div className="text-xs font-medium text-foreground">{label}</div>
+                <div className="text-xs text-muted-foreground">{hint}</div>
+              </CardContent>
+            </Card>
+          </Link>
         ))}
       </div>
 
@@ -60,11 +65,12 @@ export function DashboardPage() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Live map</CardTitle>
-            <CardDescription>Vehicles reporting in the last 60 seconds.</CardDescription>
+            <CardDescription>Vehicle locations reported in the last 60 seconds.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex h-72 items-center justify-center rounded-md border border-dashed border-border bg-surface-3 text-sm text-muted-foreground">
-              Live map coming in the next release.
+            <div className="flex h-72 flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border bg-surface-3">
+              <MapPin className="h-8 w-8 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">Live map arrives with Socket.IO integration in the next milestone.</p>
             </div>
           </CardContent>
         </Card>
@@ -72,11 +78,11 @@ export function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>Recent incidents</CardTitle>
-            <CardDescription>Latest SOS + operational events.</CardDescription>
+            <CardDescription>Latest SOS and operational events.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex h-72 items-center justify-center rounded-md border border-dashed border-border bg-surface-3 text-sm text-muted-foreground">
-              No incidents to show.
+            <div className="flex h-72 items-center justify-center text-sm text-muted-foreground">
+              {s?.incidentsOpen === 0 ? 'No open incidents. All clear.' : `${s?.incidentsOpen ?? '—'} incident(s) need attention.`}
             </div>
           </CardContent>
         </Card>

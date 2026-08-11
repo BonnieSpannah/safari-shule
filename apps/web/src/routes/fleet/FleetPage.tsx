@@ -8,28 +8,36 @@ import { format } from 'date-fns';
 import { Bus, Plus, Search, Pencil, Trash2 } from 'lucide-react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Card, CardContent } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { Pagination } from '@/components/ui/pagination';
 import { ActionMenu } from '@/components/ui/action-menu';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { FormModal } from '@/components/ui/form-modal';
+import { FormField } from '@/components/ui/form-field';
+import { EmptyState } from '@/components/ui/empty-state';
+import { TenantSelectorField } from '@/components/ui/tenant-selector-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { FormActions } from '@/components/ui/form-actions';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 import { usePermission } from '@/hooks/usePermission';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useTenantFilter, TenantBadge, TenantFilterSelect } from '@/hooks/useTenantFilter';
 import { listVehicles, createVehicle, updateVehicle, deleteVehicle, type Vehicle } from '@/lib/api/fleet';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 15;
+
+const STATUS_OPTS = [{ value: 'active', label: 'Active' }, { value: 'maintenance', label: 'Maintenance' }, { value: 'retired', label: 'Retired' }];
+const OWNERSHIP_OPTS = [{ value: 'school', label: 'School-owned' }, { value: 'hired', label: 'Hired' }];
+
+function VehicleStatusBadge({ status }: { status: string }) {
+  const cls: Record<string, string> = { active: 'bg-green-500/10 text-green-700', maintenance: 'bg-amber-500/10 text-amber-700', retired: 'bg-zinc-500/10 text-zinc-500' };
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${cls[status] ?? ''}`}>{status}</span>;
+}
 
 const schema = z.object({
+  targetTenantId: z.string().uuid().optional(),
   registration: z.string().trim().regex(/^K[A-Z]{2}\s?\d{3}[A-Z]$/i, 'Must be a Kenyan plate (e.g. KCB 123X)'),
-  make: z.string().min(1, 'Enter make'),
-  model: z.string().min(1, 'Enter model'),
+  make: z.string().min(1, 'Enter make'), model: z.string().min(1, 'Enter model'),
   year: z.coerce.number().int().min(1980).max(2100),
   capacity: z.coerce.number().int().min(1).max(120),
   ownership: z.enum(['school', 'hired'] as const),
@@ -38,209 +46,74 @@ const schema = z.object({
 });
 type Form = z.infer<typeof schema>;
 
-const STATUS_COLORS: Record<string, string> = {
-  active: 'text-green-700 bg-green-500/10',
-  maintenance: 'text-amber-700 bg-amber-500/10',
-  retired: 'text-zinc-500 bg-zinc-500/10',
-};
-
-function VehicleStatusBadge({ status }: { status: string }) {
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${STATUS_COLORS[status] ?? ''}`}>
-      {status}
-    </span>
-  );
-}
-
 export function FleetPage() {
   const canCreate = usePermission('vehicles.create');
+  const { isSuperAdmin, tenants } = useTenantFilter();
   const qc = useQueryClient();
-
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [ownershipFilter, setOwnershipFilter] = useState('');
-  const [page, setPage] = useState(1);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<Vehicle | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Vehicle | null>(null);
-
+  const [search, setSearch] = useState(''); const [statusFilter, setStatusFilter] = useState(''); const [ownershipFilter, setOwnershipFilter] = useState(''); const [tenantFilter, setTenantFilter] = useState(''); const [page, setPage] = useState(1);
+  const [dialogOpen, setDialogOpen] = useState(false); const [editing, setEditing] = useState<Vehicle | null>(null); const [deleteTarget, setDeleteTarget] = useState<Vehicle | null>(null);
   const dSearch = useDebounce(search, 300);
 
-  const query = useQuery({
-    queryKey: ['vehicles', dSearch, statusFilter, ownershipFilter, page],
-    queryFn: () => listVehicles({ q: dSearch || undefined, status: statusFilter || undefined, ownership: ownershipFilter || undefined, page, pageSize: PAGE_SIZE }),
-    placeholderData: (prev) => prev,
-  });
-
-  const vehicles = query.data?.data ?? [];
-  const total = query.data?.meta.total ?? 0;
-
+  const query = useQuery({ queryKey: ['vehicles', dSearch, statusFilter, ownershipFilter, tenantFilter, page], queryFn: () => listVehicles({ q: dSearch || undefined, status: statusFilter || undefined, ownership: ownershipFilter || undefined, tenantId: tenantFilter || undefined, page, pageSize: PAGE_SIZE }), placeholderData: (prev) => prev });
+  const vehicles = query.data?.data ?? []; const total = query.data?.meta.total ?? 0;
   const form = useForm<Form>({ resolver: zodResolver(schema), mode: 'onChange' });
 
   const openCreate = () => { setEditing(null); form.reset({ status: 'active', ownership: 'school', odometerKm: 0 }); setDialogOpen(true); };
-  const openEdit = (v: Vehicle) => {
-    setEditing(v);
-    form.reset({
-      registration: v.registration,
-      make: v.make,
-      model: v.model,
-      year: v.year,
-      capacity: v.capacity,
-      ownership: v.ownership,
-      status: v.status,
-      odometerKm: v.odometerKm,
-    });
-    setDialogOpen(true);
-  };
+  const openEdit = (v: Vehicle) => { setEditing(v); form.reset({ registration: v.registration, make: v.make, model: v.model, year: v.year, capacity: v.capacity, ownership: v.ownership, status: v.status, odometerKm: v.odometerKm }); setDialogOpen(true); };
 
   const saveMutation = useMutation({
-    mutationFn: (v: Form) => editing ? updateVehicle(editing.id, v) : createVehicle(v as any),
-    onSuccess: () => {
-      toast.success(editing ? 'Vehicle updated.' : 'Vehicle added.');
-      setDialogOpen(false);
-      qc.invalidateQueries({ queryKey: ['vehicles'] });
-    },
+    mutationFn: (v: Form) => editing ? updateVehicle(editing.id, v) : createVehicle({ ...v, targetTenantId: v.targetTenantId } as any),
+    onSuccess: () => { toast.success(editing ? 'Vehicle updated.' : 'Vehicle registered.'); setDialogOpen(false); qc.invalidateQueries({ queryKey: ['vehicles'] }); },
     onError: () => toast.error('Could not save vehicle.'),
   });
-
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteVehicle(id),
-    onSuccess: () => {
-      toast.success('Vehicle removed.');
-      setDeleteTarget(null);
-      qc.invalidateQueries({ queryKey: ['vehicles'] });
-    },
+    onSuccess: () => { toast.success('Vehicle removed.'); setDeleteTarget(null); qc.invalidateQueries({ queryKey: ['vehicles'] }); },
     onError: () => toast.error('Could not remove vehicle.'),
   });
 
   const columns: Column<Vehicle>[] = [
-    {
-      key: 'vehicle',
-      header: 'Vehicle',
-      render: (v) => (
-        <div>
-          <div className="font-medium">{v.make} {v.model} <span className="text-muted-foreground">({v.year})</span></div>
-          <div className="font-mono text-xs text-muted-foreground">{v.registration}</div>
-        </div>
-      ),
-    },
-    { key: 'capacity', header: 'Capacity', width: 'w-24', render: (v) => <span className="text-muted-foreground">{v.capacity} seats</span> },
-    { key: 'ownership', header: 'Ownership', width: 'w-28', render: (v) => <span className="capitalize text-muted-foreground">{v.ownership}</span> },
-    { key: 'status', header: 'Status', width: 'w-28', render: (v) => <VehicleStatusBadge status={v.status} /> },
-    { key: 'odometer', header: 'Odometer', width: 'w-28', render: (v) => <span className="text-xs text-muted-foreground">{v.odometerKm.toLocaleString()} km</span> },
-    { key: 'added', header: 'Added', width: 'w-28', render: (v) => <span className="text-xs text-muted-foreground">{format(new Date(v.createdAt), 'd MMM yyyy')}</span> },
-    {
-      key: 'actions',
-      header: '',
-      width: 'w-10',
-      render: (v) => (
-        <ActionMenu items={[
-          { label: 'Edit', icon: <Pencil className="h-4 w-4" />, permission: 'vehicles.edit', onClick: () => openEdit(v) },
-          { label: 'Remove', icon: <Trash2 className="h-4 w-4" />, permission: 'vehicles.delete', onClick: () => setDeleteTarget(v), variant: 'destructive' },
-        ]} />
-      ),
-    },
+    { key: 'vehicle', header: 'Vehicle', width: 'w-full', exportValue: (v) => `${v.make} ${v.model} (${v.year}) — ${v.registration}`, render: (v) => (<div><p className="font-medium">{v.make} {v.model} <span className="text-muted-foreground font-normal">({v.year})</span></p><p className="text-xs text-muted-foreground font-mono">{v.registration}</p></div>) },
+    { key: 'capacity', header: 'Seats', exportValue: (v) => v.capacity, render: (v) => <span className="whitespace-nowrap text-sm text-muted-foreground">{v.capacity}</span> },
+    { key: 'ownership', header: 'Ownership', exportValue: (v) => v.ownership, render: (v) => <span className="capitalize text-sm text-muted-foreground">{v.ownership}</span> },
+    { key: 'status', header: 'Status', exportValue: (v) => v.status, render: (v) => <VehicleStatusBadge status={v.status} /> },
+    { key: 'odometer', header: 'Odometer', exportValue: (v) => `${v.odometerKm} km`, render: (v) => <span className="whitespace-nowrap text-xs text-muted-foreground">{v.odometerKm.toLocaleString()} km</span> },
+    { key: 'added', header: 'Added', exportValue: (v) => format(new Date(v.createdAt), 'd MMM yyyy'), render: (v) => <span className="whitespace-nowrap text-xs text-muted-foreground">{format(new Date(v.createdAt), 'd MMM yyyy')}</span> },
+    ...(isSuperAdmin ? [{ key: 'tenant', header: 'Tenant', render: (v: Vehicle) => <TenantBadge tenant={v.tenant} /> }] : []),
+    { key: 'actions', header: '', align: 'right' as const, width: 'w-10', render: (v) => (<ActionMenu items={[{ label: 'Edit', icon: <Pencil className="h-4 w-4" />, permission: 'vehicles.edit', onClick: () => openEdit(v) }, { label: 'Remove', icon: <Trash2 className="h-4 w-4" />, permission: 'vehicles.delete', onClick: () => setDeleteTarget(v), variant: 'destructive' }]} />) },
   ];
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Fleet"
-        description="Vehicles, registrations and operational status."
-        actions={canCreate ? (
-          <Button onClick={openCreate} className="gap-1.5 bg-green-600 hover:bg-green-700">
-            <Plus className="h-4 w-4" /> Add vehicle
-          </Button>
-        ) : undefined}
+    <div className="space-y-5">
+      <PageHeader title="Fleet" description="Vehicles, registrations and operational status." actions={canCreate ? <Button onClick={openCreate} size="sm" className="gap-1.5 bg-green-600 hover:bg-green-700"><Plus className="h-4 w-4" />Add vehicle</Button> : undefined} />
+
+      <DataTable
+        title="All vehicles"
+        description={total > 0 ? `${total} vehicle${total !== 1 ? 's' : ''}` : undefined}
+        search={<div className="relative w-full"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Search plate, make or model…" className="pl-8 h-9 text-sm" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>}
+        filters={<><SearchableSelect options={[{ value: '', label: 'All statuses' }, ...STATUS_OPTS]} value={statusFilter} onChange={(v) => { setStatusFilter(v); setPage(1); }} placeholder="Status" className="h-9 min-w-[120px]" /><SearchableSelect options={[{ value: '', label: 'All ownership' }, ...OWNERSHIP_OPTS]} value={ownershipFilter} onChange={(v) => { setOwnershipFilter(v); setPage(1); }} placeholder="Ownership" className="h-9 min-w-[130px]" />{isSuperAdmin && <TenantFilterSelect tenants={tenants} value={tenantFilter} onChange={(v) => { setTenantFilter(v); setPage(1); }} />}</>}
+        filtersActive={statusFilter !== '' || ownershipFilter !== '' || tenantFilter !== ''}
+        selectable exportFilename="fleet"
+        page={page} pageSize={PAGE_SIZE} total={total} onPrev={() => setPage((p) => p - 1)} onNext={() => setPage((p) => p + 1)}
+        columns={columns} rows={vehicles} rowKey={(v) => v.id} loading={query.isLoading} skeletonRows={PAGE_SIZE}
+        empty={<EmptyState icon={<Bus className="h-6 w-6" />} title="No vehicles found" description={canCreate ? 'Register the first vehicle above.' : undefined} />}
       />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search by registration or make…" className="pl-9" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+      <FormModal open={dialogOpen} onClose={() => setDialogOpen(false)} title={editing ? `Edit — ${editing.registration}` : 'Register vehicle'} subtitle="Vehicle registration and operational details" onSubmit={form.handleSubmit((v) => saveMutation.mutate(v))} submitLabel={editing ? 'Save changes' : 'Register vehicle'} submitting={saveMutation.isPending}>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {!editing && <div className="sm:col-span-2"><TenantSelectorField value={form.watch('targetTenantId') ?? ''} onChange={(v) => form.setValue('targetTenantId', v)} error={form.formState.errors.targetTenantId?.message} /></div>}
+          <FormField label="Registration plate" required error={form.formState.errors.registration?.message}><Input placeholder="KCB 123X" {...form.register('registration')} /></FormField>
+          <FormField label="Make" required error={form.formState.errors.make?.message}><Input placeholder="Toyota" {...form.register('make')} /></FormField>
+          <FormField label="Model" required error={form.formState.errors.model?.message}><Input placeholder="Hiace" {...form.register('model')} /></FormField>
+          <FormField label="Year" required error={form.formState.errors.year?.message}><Input type="number" placeholder="2020" {...form.register('year')} /></FormField>
+          <FormField label="Seats (capacity)" required error={form.formState.errors.capacity?.message}><Input type="number" placeholder="14" {...form.register('capacity')} /></FormField>
+          <FormField label="Odometer (km)" error={form.formState.errors.odometerKm?.message}><Input type="number" placeholder="0" {...form.register('odometerKm')} /></FormField>
+          <FormField label="Ownership" required error={form.formState.errors.ownership?.message}><SearchableSelect options={OWNERSHIP_OPTS} value={form.watch('ownership') ?? ''} onChange={(v) => form.setValue('ownership', v as any)} placeholder="Select ownership" /></FormField>
+          <FormField label="Status" required error={form.formState.errors.status?.message}><SearchableSelect options={STATUS_OPTS} value={form.watch('status') ?? ''} onChange={(v) => form.setValue('status', v as any)} placeholder="Select status" /></FormField>
         </div>
-        <select className="rounded-md border border-input bg-background px-3 py-2 text-sm" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
-          <option value="">All statuses</option>
-          <option value="active">Active</option>
-          <option value="maintenance">Maintenance</option>
-          <option value="retired">Retired</option>
-        </select>
-        <select className="rounded-md border border-input bg-background px-3 py-2 text-sm" value={ownershipFilter} onChange={(e) => { setOwnershipFilter(e.target.value); setPage(1); }}>
-          <option value="">All ownership</option>
-          <option value="school">School-owned</option>
-          <option value="hired">Hired</option>
-        </select>
-      </div>
+      </FormModal>
 
-      <Card>
-        <CardContent className="pt-4">
-          <DataTable columns={columns} rows={vehicles} rowKey={(v) => v.id} loading={query.isLoading} skeletonRows={PAGE_SIZE} empty={
-            <div className="flex flex-col items-center gap-3 py-12">
-              <Bus className="h-8 w-8 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">No vehicles registered. {canCreate && 'Add the first vehicle above.'}</p>
-            </div>
-          } />
-          <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPrev={() => setPage((p) => p - 1)} onNext={() => setPage((p) => p + 1)} />
-        </CardContent>
-      </Card>
-
-      {/* Create/Edit dialog */}
-      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) setDialogOpen(false); }}>
-        <DialogContent hideCloseButton className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{editing ? `Edit — ${editing.registration}` : 'Add vehicle'}</DialogTitle>
-            <p className="text-sm text-muted-foreground">Vehicle registration and operational details</p>
-            <hr className="mt-1 border-border" />
-          </DialogHeader>
-          <form onSubmit={form.handleSubmit((v) => saveMutation.mutate(v))} noValidate className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              {([
-                ['registration', 'Registration', 'text', 'KCB 123X', true],
-                ['make', 'Make', 'text', 'Toyota', true],
-                ['model', 'Model', 'text', 'Hiace', true],
-                ['year', 'Year', 'number', '2020', true],
-                ['capacity', 'Capacity (seats)', 'number', '14', true],
-                ['odometerKm', 'Odometer (km)', 'number', '0', false],
-              ] as const).map(([field, label, type, placeholder, required]) => (
-                <div key={field} className="space-y-1.5">
-                  <Label>{label}{required && <span className="text-danger ml-0.5">*</span>}</Label>
-                  <Input type={type} placeholder={placeholder} invalid={!!(form.formState.errors as any)[field]} {...form.register(field)} />
-                  {(form.formState.errors as any)[field] && <p className="text-xs text-danger">{(form.formState.errors as any)[field]?.message}</p>}
-                </div>
-              ))}
-              <div className="space-y-1.5">
-                <Label>Ownership <span className="text-danger">*</span></Label>
-                <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" {...form.register('ownership')}>
-                  <option value="school">School-owned</option>
-                  <option value="hired">Hired</option>
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Status <span className="text-danger">*</span></Label>
-                <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" {...form.register('status')}>
-                  <option value="active">Active</option>
-                  <option value="maintenance">Maintenance</option>
-                  <option value="retired">Retired</option>
-                </select>
-              </div>
-            </div>
-            <FormActions onCancel={() => setDialogOpen(false)} submitLabel={editing ? 'Save changes' : 'Add vehicle'} pending={saveMutation.isPending} />
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {deleteTarget && (
-        <ConfirmDialog
-          open
-          onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}
-          title="Remove vehicle?"
-          description={`${deleteTarget.registration} (${deleteTarget.make} ${deleteTarget.model}) will be permanently removed.`}
-          confirmLabel="Remove"
-          destructive
-          onConfirm={() => deleteMutation.mutate(deleteTarget.id)}
-          pending={deleteMutation.isPending}
-        />
-      )}
+      {deleteTarget && <ConfirmDialog open onOpenChange={(o) => { if (!o) setDeleteTarget(null); }} title="Remove vehicle?" description={`${deleteTarget.registration} (${deleteTarget.make} ${deleteTarget.model}) will be permanently removed.`} confirmLabel="Remove" destructive onConfirm={() => deleteMutation.mutate(deleteTarget.id)} pending={deleteMutation.isPending} />}
     </div>
   );
 }

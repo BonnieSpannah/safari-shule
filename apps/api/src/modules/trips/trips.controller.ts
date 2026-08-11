@@ -1,6 +1,7 @@
-import { Controller, Get, Param, Post } from '@nestjs/common';
+import { Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
+import type { Request } from 'express';
 import {
   tripInput,
   tripCancelInput,
@@ -8,8 +9,11 @@ import {
   TRIP_STATUSES,
 } from '@safari-shule/shared-types';
 import { RequirePermission } from '../../rbac/permission.decorators';
+import { RbacService } from '../../rbac/rbac.service';
 import { Audited } from '../../audit/audit.decorators';
 import { ZodBody, ZodQuery } from '../../common/validation/zod-pipe';
+import { runWithBypass } from '../../common/context/request-context';
+import { resolveTenantScope } from '../../common/tenant/tenant-scope';
 import { TripsService } from './trips.service';
 
 const listQuery = paginationQuery.extend({
@@ -19,12 +23,17 @@ const listQuery = paginationQuery.extend({
 @ApiTags('trips')
 @Controller('trips')
 export class TripsController {
-  constructor(private readonly svc: TripsService) {}
+  constructor(private readonly svc: TripsService, private readonly rbac: RbacService) {}
 
   @Get()
   @RequirePermission('trips.view')
-  list(@ZodQuery(listQuery) q: z.infer<typeof listQuery>) {
-    return this.svc.list(q);
+  async list(
+    @Req() req: Request,
+    @ZodQuery(listQuery.extend({ tenantId: z.string().uuid().optional() })) q: z.infer<typeof listQuery> & { tenantId?: string },
+  ) {
+    const scope = await resolveTenantScope(this.rbac, req, q.tenantId);
+    const run = () => this.svc.list({ ...q, scopeTenantId: scope.tenantId });
+    return scope.isSuperAdmin ? runWithBypass(run) : run();
   }
 
   @Get(':id')

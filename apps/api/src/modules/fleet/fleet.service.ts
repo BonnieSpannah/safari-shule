@@ -14,9 +14,9 @@ import type {
 export class FleetService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listVehicles(q: PaginationQuery & { status?: string; ownership?: string }) {
-    const tenantId = requireTenantId();
-    const where: any = { tenantId };
+  async listVehicles(q: PaginationQuery & { status?: string; ownership?: string; scopeTenantId?: string | null }) {
+    const tenantId = q.scopeTenantId !== undefined ? q.scopeTenantId : requireTenantId();
+    const where: any = tenantId ? { tenantId } : {};
     if (q.q)
       where.OR = [
         { registration: { contains: q.q, mode: 'insensitive' } },
@@ -27,7 +27,7 @@ export class FleetService {
     if (q.ownership) where.ownership = q.ownership;
     const [total, data] = await Promise.all([
       this.prisma.vehicle.count({ where }),
-      this.prisma.vehicle.findMany({ where, ...buildPagination(q) }),
+      this.prisma.vehicle.findMany({ where, ...buildPagination(q), include: { tenant: { select: { id: true, name: true, slug: true } } } }),
     ]);
     return paginated(data, total, q);
   }
@@ -38,8 +38,8 @@ export class FleetService {
     return row;
   }
 
-  createVehicle(input: VehicleInput) {
-    const tenantId = requireTenantId();
+  createVehicle(input: VehicleInput & { targetTenantId?: string }) {
+    const tenantId = input.targetTenantId ?? requireTenantId();
     return this.prisma.vehicle.create({
       data: {
         tenantId,

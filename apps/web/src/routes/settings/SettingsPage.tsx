@@ -23,6 +23,7 @@ import { FormActions } from '@/components/ui/form-actions';
 
 import { usePermission, useAnyPermission } from '@/hooks/usePermission';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useTenantFilter, TenantBadge, TenantFilterSelect } from '@/hooks/useTenantFilter';
 import { humanizeRole } from '@/lib/roles';
 import { listUsers, inviteUser, deactivateUser, activateUser, type User } from '@/lib/api/users';
 import { listStaff, createStaffMember, updateStaffMember, deleteStaffMember, type StaffMember } from '@/lib/api/staff';
@@ -244,7 +245,7 @@ function UsersTab() {
                 )} />
               </div>
             </div>
-            <FormActions onCancel={() => { setInviteOpen(false); form.reset(); }} submitLabel="Send invitation" pending={inviteMutation.isPending} />
+            <FormActions onCancel={() => { setInviteOpen(false); form.reset(); }} submitLabel="Send invitation" submitting={inviteMutation.isPending} />
           </form>
         </DialogContent>
       </Dialog>
@@ -271,9 +272,11 @@ function UsersTab() {
 // ─── Staff tab ────────────────────────────────────────────────────────────────
 function StaffTab() {
   const canManage = usePermission('staff.create');
+  const { isSuperAdmin, tenants } = useTenantFilter();
   const qc = useQueryClient();
 
   const [search, setSearch] = useState('');
+  const [tenantFilter, setTenantFilter] = useState('');
   const [page, setPage] = useState(1);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<StaffMember | null>(null);
@@ -282,8 +285,8 @@ function StaffTab() {
   const dSearch = useDebounce(search, 300);
 
   const query = useQuery({
-    queryKey: ['staff', dSearch, page],
-    queryFn: () => listStaff({ q: dSearch || undefined, page, pageSize: PAGE_SIZE }),
+    queryKey: ['staff', dSearch, tenantFilter, page],
+    queryFn: () => listStaff({ q: dSearch || undefined, tenantId: tenantFilter || undefined, page, pageSize: PAGE_SIZE }),
     placeholderData: (prev) => prev,
   });
 
@@ -355,6 +358,7 @@ function StaffTab() {
     },
     { key: 'gender', header: 'Gender', width: 'w-24', render: (s) => <span className="capitalize text-muted-foreground">{s.gender}</span> },
     { key: 'joined', header: 'Added', width: 'w-28', render: (s) => <span className="text-xs text-muted-foreground">{format(new Date(s.createdAt), 'd MMM yyyy')}</span> },
+    ...(isSuperAdmin ? [{ key: 'tenant', header: 'Tenant', width: 'w-32' as const, render: (s: StaffMember) => <TenantBadge tenant={s.tenant} /> }] : []),
     {
       key: 'actions',
       header: '',
@@ -375,6 +379,7 @@ function StaffTab() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search staff…" className="pl-9" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
         </div>
+        {isSuperAdmin && <TenantFilterSelect tenants={tenants} value={tenantFilter} onChange={(v) => { setTenantFilter(v); setPage(1); }} />}
         {canManage && (
           <Button onClick={openCreate} className="gap-1.5 bg-green-600 hover:bg-green-700">
             <UserPlus className="h-4 w-4" /> Add staff
@@ -421,7 +426,7 @@ function StaffTab() {
                 {form.formState.errors.gender && <p className="text-xs text-danger">{form.formState.errors.gender.message}</p>}
               </div>
             </div>
-            <FormActions onCancel={() => setDialogOpen(false)} submitLabel={editing ? 'Save changes' : 'Add staff member'} pending={saveMutation.isPending} />
+            <FormActions onCancel={() => setDialogOpen(false)} submitLabel={editing ? 'Save changes' : 'Add staff member'} submitting={saveMutation.isPending} />
           </form>
         </DialogContent>
       </Dialog>

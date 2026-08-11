@@ -16,6 +16,9 @@ import { FleetPage } from './fleet/FleetPage';
 import { RoutesPage } from './routes/RoutesPage';
 import { SettingsPage } from './settings/SettingsPage';
 import { ParentsPage } from './parents/ParentsPage';
+import { TripsPage } from './trips/TripsPage';
+import { HardwarePage } from './hardware/HardwarePage';
+import { AuditPage } from './audit/AuditPage';
 import { ProfilePage } from './me/ProfilePage';
 import { SecurityPage } from './me/SecurityPage';
 import { PreferencesPage } from './me/PreferencesPage';
@@ -110,21 +113,35 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: 'settings',
+        path: 'trips',
         element: (
-          <PermissionGate anyOf={['invitations.send', 'users.view', 'staff.view', 'staff.create']}>
-            <SettingsPage />
+          <PermissionGate anyOf={['trips.view', 'trips.dispatch']}>
+            <TripsPage />
+          </PermissionGate>
+        ),
+      },
+      {
+        path: 'hardware',
+        element: (
+          <PermissionGate anyOf={['rfid_devices.view', 'rfid_devices.manage']}>
+            <HardwarePage />
           </PermissionGate>
         ),
       },
       {
         path: 'audit',
         element: (
-          <PlaceholderPage
-            title="Audit log"
-            description="Every mutation, sign-in, and sensitive read across your tenant — immutable, timestamped."
-            eta="Audit browser ships in M3."
-          />
+          <PermissionGate anyOf={['audit.view']}>
+            <AuditPage />
+          </PermissionGate>
+        ),
+      },
+      {
+        path: 'settings',
+        element: (
+          <PermissionGate anyOf={['invitations.send', 'users.view', 'staff.view', 'staff.create']}>
+            <SettingsPage />
+          </PermissionGate>
         ),
       },
       {

@@ -16,14 +16,14 @@ import type {
 export class RoutesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listRoutes(q: PaginationQuery & { isActive?: string }) {
-    const tenantId = requireTenantId();
-    const where: any = { tenantId };
+  async listRoutes(q: PaginationQuery & { isActive?: string; scopeTenantId?: string | null }) {
+    const tenantId = q.scopeTenantId !== undefined ? q.scopeTenantId : requireTenantId();
+    const where: any = tenantId ? { tenantId } : {};
     if (q.q) where.name = { contains: q.q, mode: 'insensitive' };
     if (q.isActive !== undefined) where.isActive = q.isActive === 'true';
     const [total, data] = await Promise.all([
       this.prisma.route.count({ where }),
-      this.prisma.route.findMany({ where, ...buildPagination(q), orderBy: { name: 'asc' } }),
+      this.prisma.route.findMany({ where, ...buildPagination(q), orderBy: { name: 'asc' }, include: { tenant: { select: { id: true, name: true, slug: true } } } }),
     ]);
     return paginated(data, total, q);
   }

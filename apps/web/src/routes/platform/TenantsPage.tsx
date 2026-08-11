@@ -627,15 +627,15 @@ export function TenantsPage() {
           {paginated.length > 0 && (
             <>
               <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
-                      <th className="py-3 pr-6 font-medium">Tenant/School</th>
-                      <th className="py-3 pr-6 font-medium">Plan</th>
-                      <th className="py-3 pr-6 font-medium">Contact</th>
-                      <th className="py-3 pr-6 font-medium">Since</th>
-                      <th className="py-3 pr-6 font-medium">Status</th>
-                      <th className="py-3 font-medium">Actions</th>
+                    <tr className="border-b border-border text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      <th className="py-3 pr-4 text-left font-medium w-full">Tenant / School</th>
+                      <th className="py-3 pr-4 text-left font-medium">Plan</th>
+                      <th className="py-3 pr-4 text-left font-medium">Contact</th>
+                      <th className="py-3 pr-4 text-left font-medium">Since</th>
+                      <th className="py-3 pr-4 text-left font-medium">Status</th>
+                      <th className="py-3 pl-2 text-right font-medium w-10">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -732,24 +732,25 @@ function TenantRow({ tenant: t, canManage, onView, onEdit, onAction }: {
 }) {
   const availableActions = STATUS_ACTIONS[t.status] ?? [];
   return (
-    <tr className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
-      <td className="py-3 pr-6">
+    <tr
+    className="border-b border-border/40 last:border-0 hover:bg-muted/30 transition-colors">
+      <td className="py-3 pr-4">
         <div className="font-medium">{t.name}</div>
         <span className="mt-0.5 inline-block rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{t.slug}</span>
       </td>
-      <td className="py-3 pr-6"><PlanBadge tier={t.planTier} /></td>
-      <td className="py-3 pr-6">
+      <td className="py-3 pr-4"><PlanBadge tier={t.planTier} /></td>
+      <td className="py-3 pr-4">
         <div className="text-muted-foreground">{t.contactEmail}</div>
         {t.contactPhone && <div className="mt-0.5 text-xs text-muted-foreground">{t.contactPhone}</div>}
       </td>
-      <td className="py-3 pr-6">
+      <td className="py-3 pr-4">
         <div className="text-muted-foreground">{format(new Date(t.createdAt), 'd MMM yyyy')}</div>
         <div className="mt-0.5 text-xs text-muted-foreground">
           {formatDistanceToNow(new Date(t.createdAt), { addSuffix: true })}
         </div>
       </td>
-      <td className="py-3 pr-6"><StatusBadge status={t.status} /></td>
-      <td className="py-3">
+      <td className="py-3 pr-4"><StatusBadge status={t.status} /></td>
+      <td className="py-3 pl-2 text-right">
         {canManage && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

@@ -1,13 +1,12 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { MoreHorizontal } from 'lucide-react';
-import { useClickOutside } from '@/hooks/useDebounce';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
 
 export interface ActionItem {
   label: string;
   icon?: React.ReactNode;
-  /** If specified, item is hidden when user lacks this permission */
   permission?: string;
   onClick: () => void;
   variant?: 'default' | 'destructive';
@@ -20,27 +19,58 @@ interface ActionMenuProps {
 
 export function ActionMenu({ items }: ActionMenuProps) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const perms = new Set(useAuthStore((s) => s.user?.permissions ?? []));
-  const ref = useClickOutside<HTMLDivElement>(() => setOpen(false));
 
   const visible = items.filter((item) =>
     item.permission ? perms.has(item.permission) : true,
   );
 
+  // Position the portal menu below the trigger button
+  const openMenu = () => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const menuWidth = 176; // min-w-[176px]
+    const spaceRight = window.innerWidth - rect.right;
+    const left = spaceRight >= menuWidth ? rect.right - menuWidth : rect.left;
+    setPos({ top: rect.bottom + 4, left });
+    setOpen(true);
+  };
+
+  // Close on outside click or scroll
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    document.addEventListener('mousedown', close);
+    document.addEventListener('scroll', close, true);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('scroll', close, true);
+    };
+  }, [open]);
+
   if (visible.length === 0) return null;
 
   return (
-    <div ref={ref} className="relative inline-block">
+    <>
       <button
-        onClick={() => setOpen((v) => !v)}
+        ref={triggerRef}
+        onClick={openMenu}
         className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none"
         aria-label="Row actions"
       >
         <MoreHorizontal className="h-4 w-4" />
       </button>
 
-      {open && (
-        <div className="absolute right-0 top-8 z-50 min-w-[160px] rounded-md border border-border bg-surface shadow-lg">
+      {open && createPortal(
+        <div
+          ref={menuRef}
+          onMouseDown={(e) => e.stopPropagation()}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999 }}
+          className="min-w-[176px] overflow-hidden rounded-md border border-border bg-card shadow-xl"
+        >
           {visible.map((item, i) => (
             <button
               key={i}
@@ -50,7 +80,7 @@ export function ActionMenu({ items }: ActionMenuProps) {
                 item.onClick();
               }}
               className={cn(
-                'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors first:rounded-t-md last:rounded-b-md',
+                'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors',
                 'hover:bg-muted focus:outline-none disabled:pointer-events-none disabled:opacity-50',
                 item.variant === 'destructive'
                   ? 'text-danger hover:bg-danger/10'
@@ -61,8 +91,10 @@ export function ActionMenu({ items }: ActionMenuProps) {
               {item.label}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   );
 }
+

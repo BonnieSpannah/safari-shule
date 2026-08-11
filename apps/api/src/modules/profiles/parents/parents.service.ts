@@ -9,15 +9,16 @@ import { parentInput, type ParentInput, type PaginationQuery } from '@safari-shu
 export class ParentsService {
   constructor(private readonly prisma: PrismaService, private readonly validator: DynamicValidationService) {}
 
-  async list(q: PaginationQuery) {
-    const where: any = {};
+  async list(q: PaginationQuery & { scopeTenantId?: string | null }) {
+    const tenantId = q.scopeTenantId !== undefined ? q.scopeTenantId : requireTenantId();
+    const where: any = tenantId ? { tenantId } : {};
     if (q.q) where.OR = [
       { legalName: { contains: q.q, mode: 'insensitive' } },
       { phoneE164: { contains: q.q } },
     ];
     const [total, data] = await Promise.all([
       this.prisma.parent.count({ where }),
-      this.prisma.parent.findMany({ where, ...buildPagination(q), include: { students: { include: { student: true } } } }),
+      this.prisma.parent.findMany({ where, ...buildPagination(q), include: { tenant: { select: { id: true, name: true, slug: true } }, students: { include: { student: true } } } }),
     ]);
     return paginated(data, total, q);
   }
@@ -31,8 +32,8 @@ export class ParentsService {
     return row;
   }
 
-  async create(input: ParentInput) {
-    const tenantId = requireTenantId();
+  async create(input: ParentInput & { targetTenantId?: string }) {
+    const tenantId = input.targetTenantId ?? requireTenantId();
     const parsed = parentInput.parse(input);
     const flex = await this.validator.validateAndNormalize(tenantId, 'parent', parsed.flexibleAttributes);
     return this.prisma.parent.create({

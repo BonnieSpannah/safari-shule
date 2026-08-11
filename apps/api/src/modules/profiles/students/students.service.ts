@@ -14,9 +14,9 @@ import {
 export class StudentsService {
   constructor(private readonly prisma: PrismaService, private readonly validator: DynamicValidationService) {}
 
-  async list(q: PaginationQuery & { gender?: string; classroom?: string }) {
-    const tenantId = requireTenantId();
-    const where: any = { tenantId };
+  async list(q: PaginationQuery & { gender?: string; classroom?: string; scopeTenantId?: string | null }) {
+    const tenantId = q.scopeTenantId !== undefined ? q.scopeTenantId : requireTenantId();
+    const where: any = tenantId ? { tenantId } : {};
     if (q.q) where.OR = [
       { legalName: { contains: q.q, mode: 'insensitive' } },
       { admissionNumber: { contains: q.q, mode: 'insensitive' } },
@@ -25,7 +25,7 @@ export class StudentsService {
     if (q.classroom) where.classroom = { contains: q.classroom, mode: 'insensitive' };
     const [total, data] = await Promise.all([
       this.prisma.student.count({ where }),
-      this.prisma.student.findMany({ where, ...buildPagination(q) }),
+      this.prisma.student.findMany({ where, ...buildPagination(q), include: { tenant: { select: { id: true, name: true, slug: true } } } }),
     ]);
     return paginated(data, total, q);
   }
@@ -39,8 +39,8 @@ export class StudentsService {
     return row;
   }
 
-  async create(input: StudentInput) {
-    const tenantId = requireTenantId();
+  async create(input: StudentInput & { targetTenantId?: string }) {
+    const tenantId = input.targetTenantId ?? requireTenantId();
     const parsed = studentInput.parse(input);
     const flex = await this.validator.validateAndNormalize(tenantId, 'student', parsed.flexibleAttributes);
     return this.prisma.student.create({

@@ -17,6 +17,8 @@ export interface AuthUser {
   roles?: string[];
   permissions?: string[];
   preferences?: UserPreferences;
+  tenantName?: string | null;
+  tenantSlug?: string | null;
 }
 
 export interface LoginResponse {

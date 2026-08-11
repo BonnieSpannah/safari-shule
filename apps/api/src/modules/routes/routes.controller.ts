@@ -1,6 +1,7 @@
-import { Controller, Get, Param, Post } from '@nestjs/common';
+import { Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
+import type { Request } from 'express';
 import {
   routeInput,
   geofenceInput,
@@ -8,19 +9,27 @@ import {
   paginationQuery,
 } from '@safari-shule/shared-types';
 import { RequirePermission } from '../../rbac/permission.decorators';
+import { RbacService } from '../../rbac/rbac.service';
 import { Audited } from '../../audit/audit.decorators';
 import { ZodBody, ZodQuery } from '../../common/validation/zod-pipe';
+import { runWithBypass } from '../../common/context/request-context';
+import { resolveTenantScope } from '../../common/tenant/tenant-scope';
 import { RoutesService } from './routes.service';
 
 @ApiTags('routes')
 @Controller()
 export class RoutesController {
-  constructor(private readonly svc: RoutesService) {}
+  constructor(private readonly svc: RoutesService, private readonly rbac: RbacService) {}
 
   @Get('routes')
   @RequirePermission('routes.view')
-  list(@ZodQuery(paginationQuery.extend({ isActive: z.string().optional() })) q: z.infer<typeof paginationQuery> & { isActive?: string }) {
-    return this.svc.listRoutes(q);
+  async list(
+    @Req() req: Request,
+    @ZodQuery(paginationQuery.extend({ isActive: z.string().optional(), tenantId: z.string().uuid().optional() })) q: z.infer<typeof paginationQuery> & { isActive?: string; tenantId?: string },
+  ) {
+    const scope = await resolveTenantScope(this.rbac, req, q.tenantId);
+    const run = () => this.svc.listRoutes({ ...q, scopeTenantId: scope.tenantId });
+    return scope.isSuperAdmin ? runWithBypass(run) : run();
   }
 
   @Get('routes/:id')

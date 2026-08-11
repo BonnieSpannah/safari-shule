@@ -37,6 +37,7 @@ import { TelemetryModule } from './modules/telemetry/telemetry.module';
 import { IncidentsModule } from './modules/incidents/incidents.module';
 import { CommsModule } from './comms/comms.module';
 import { TenantAdminModule } from './modules/tenant-admin/tenant-admin.module';
+import { DashboardController } from './modules/dashboard/dashboard.controller';
 
 @Module({
   imports: [
@@ -88,6 +89,7 @@ import { TenantAdminModule } from './modules/tenant-admin/tenant-admin.module';
     TelemetryModule,
     IncidentsModule,
   ],
+  controllers: [DashboardController],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },

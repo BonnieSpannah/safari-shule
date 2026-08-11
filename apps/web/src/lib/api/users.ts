@@ -45,20 +45,3 @@ export async function deactivateUser(id: string): Promise<void> {
 export async function activateUser(id: string): Promise<void> {
   await api.patch(`/v1/users/${id}/status`, { status: 'active' });
 }
-
-export async function inviteUser(input: InviteUserInput): Promise<void> {
-  await api.post('/v1/invitations', {
-    email: input.email,
-    fullName: input.fullName,
-    phone: input.phone || undefined,
-    roleKeys: input.roleKeys,
-  });
-}
-
-export async function deactivateUser(id: string): Promise<void> {
-  await api.patch(`/v1/users/${id}/status`, { status: 'suspended' });
-}
-
-export async function activateUser(id: string): Promise<void> {
-  await api.patch(`/v1/users/${id}/status`, { status: 'active' });
-}

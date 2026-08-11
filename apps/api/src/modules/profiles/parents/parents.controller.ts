@@ -1,10 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { parentInput, paginationQuery, PARENT_RELATIONS } from '@safari-shule/shared-types';
 import { z } from 'zod';
+import type { Request } from 'express';
 import { RequirePermission } from '../../../rbac/permission.decorators';
+import { RbacService } from '../../../rbac/rbac.service';
 import { Audited } from '../../../audit/audit.decorators';
 import { ZodBody, ZodQuery } from '../../../common/validation/zod-pipe';
+import { runWithBypass } from '../../../common/context/request-context';
+import { resolveTenantScope } from '../../../common/tenant/tenant-scope';
 import { ParentsService } from './parents.service';
 
 const linkSchema = z.object({
@@ -16,12 +20,17 @@ const linkSchema = z.object({
 @ApiTags('parents')
 @Controller('parents')
 export class ParentsController {
-  constructor(private readonly svc: ParentsService) {}
+  constructor(private readonly svc: ParentsService, private readonly rbac: RbacService) {}
 
   @Get()
   @RequirePermission('parents.view')
-  list(@ZodQuery(paginationQuery) q: z.infer<typeof paginationQuery>) {
-    return this.svc.list(q);
+  async list(
+    @Req() req: Request,
+    @ZodQuery(paginationQuery.extend({ tenantId: z.string().uuid().optional() })) q: z.infer<typeof paginationQuery> & { tenantId?: string },
+  ) {
+    const scope = await resolveTenantScope(this.rbac, req, q.tenantId);
+    const run = () => this.svc.list({ ...q, scopeTenantId: scope.tenantId });
+    return scope.isSuperAdmin ? runWithBypass(run) : run();
   }
 
   @Get(':id')

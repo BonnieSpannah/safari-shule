@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, Link } from 'react-router-dom';
 import {
   LayoutDashboard,
   Bus,
@@ -13,6 +13,7 @@ import {
   Building2,
   ShieldCheck,
   FileText,
+  Cpu,
 } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 import { cn } from '@/lib/utils';
@@ -73,7 +74,13 @@ const SECTIONS: readonly NavSection[] = [
         to: '/trips',
         label: 'Trips',
         icon: Radio,
-        permissions: ['trips.list', 'trips.view', 'trips.live.view'],
+        permissions: ['trips.view', 'trips.dispatch', 'trips.live_track'],
+      },
+      {
+        to: '/hardware',
+        label: 'Hardware',
+        icon: Cpu,
+        permissions: ['rfid_devices.view', 'rfid_devices.manage'],
       },
       {
         to: '/incidents',
@@ -103,7 +110,7 @@ const SECTIONS: readonly NavSection[] = [
         to: '/audit',
         label: 'Audit log',
         icon: FileText,
-        permissions: ['audit.view', 'audit.list'],
+        permissions: ['audit.view'],
       },
     ],
   },
@@ -162,17 +169,17 @@ export function Sidebar() {
         collapsed ? 'md:w-16' : 'md:w-60',
       )}
     >
-      <div className="flex h-14 items-center gap-2 border-b border-border px-3">
+      <Link to="/" className="flex h-14 items-center gap-2 border-b border-border px-3 hover:bg-muted/30 transition-colors">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
           <Bus className="h-4 w-4" />
         </div>
         {!collapsed && (
-          <div className="flex flex-col leading-tight">
-            <span className="text-sm font-semibold">Safari Shule</span>
+          <div className="flex flex-col leading-tight min-w-0">
+            <span className="truncate text-sm font-semibold">{user?.tenantName ?? 'Safari Shule'}</span>
             <span className="text-xs text-muted-foreground">Ops console</span>
           </div>
         )}
-      </div>
+      </Link>
 
       <nav className="flex-1 space-y-4 overflow-y-auto p-2">
         {visibleSections.map((section) => (

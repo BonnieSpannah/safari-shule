@@ -13,6 +13,7 @@ export interface Parent {
   flexibleAttributes: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+  tenant?: { id: string; name: string; slug: string } | null;
 }
 
 export interface ListParentsResponse {
@@ -20,7 +21,7 @@ export interface ListParentsResponse {
   meta: { page: number; pageSize: number; total: number; pageCount: number };
 }
 
-export async function listParents(params?: { q?: string; page?: number; pageSize?: number }): Promise<ListParentsResponse> {
+export async function listParents(params?: { q?: string; tenantId?: string; page?: number; pageSize?: number }): Promise<ListParentsResponse> {
   const { data } = await api.get<ListParentsResponse>('/v1/parents', { params });
   return data;
 }

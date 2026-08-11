@@ -8,15 +8,20 @@ import type { TripInput, PaginationQuery } from '@safari-shule/shared-types';
 export class TripsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(q: PaginationQuery & { status?: string }) {
-    const where: any = {};
+  async list(q: PaginationQuery & { status?: string; scopeTenantId?: string | null }) {
+    const tenantId = q.scopeTenantId !== undefined ? q.scopeTenantId : requireTenantId();
+    const where: any = tenantId ? { tenantId } : {};
     if (q.status) where.status = q.status as any;
     const [total, data] = await Promise.all([
       this.prisma.trip.count({ where }),
       this.prisma.trip.findMany({
         where,
         ...buildPagination(q),
-        include: { route: true, vehicle: true },
+        include: {
+          route: true,
+          vehicle: true,
+          tenant: { select: { id: true, name: true, slug: true } },
+        },
       }),
     ]);
     return paginated(data, total, q);

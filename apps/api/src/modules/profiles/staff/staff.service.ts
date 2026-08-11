@@ -9,15 +9,16 @@ import { staffInput, type StaffInput, type PaginationQuery } from '@safari-shule
 export class StaffService {
   constructor(private readonly prisma: PrismaService, private readonly validator: DynamicValidationService) {}
 
-  async list(q: PaginationQuery) {
-    const where: any = {};
+  async list(q: PaginationQuery & { scopeTenantId?: string | null }) {
+    const tenantId = q.scopeTenantId !== undefined ? q.scopeTenantId : requireTenantId();
+    const where: any = tenantId ? { tenantId } : {};
     if (q.q) where.OR = [
       { legalName: { contains: q.q, mode: 'insensitive' } },
       { employeeNumber: { contains: q.q, mode: 'insensitive' } },
     ];
     const [total, data] = await Promise.all([
       this.prisma.staff.count({ where }),
-      this.prisma.staff.findMany({ where, ...buildPagination(q) }),
+      this.prisma.staff.findMany({ where, ...buildPagination(q), include: { tenant: { select: { id: true, name: true, slug: true } } } }),
     ]);
     return paginated(data, total, q);
   }
@@ -28,8 +29,8 @@ export class StaffService {
     return row;
   }
 
-  async create(input: StaffInput) {
-    const tenantId = requireTenantId();
+  async create(input: StaffInput & { targetTenantId?: string }) {
+    const tenantId = input.targetTenantId ?? requireTenantId();
     const parsed = staffInput.parse(input);
     const flex = await this.validator.validateAndNormalize(tenantId, 'staff', parsed.flexibleAttributes);
     return this.prisma.staff.create({

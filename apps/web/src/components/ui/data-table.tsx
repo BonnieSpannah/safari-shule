@@ -1,104 +1,627 @@
-import { Loader2 } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { ChevronLeft, ChevronRight, Filter, Download, FileText, Sheet, File, Square, CheckSquare, MinusSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Card, CardContent } from './card';
+import { Button } from './button';
+import { useAuthStore } from '@/stores/auth.store';
+import { humanizeRole, primaryRoleSlug } from '@/lib/roles';
+import { fetchMe } from '@/lib/api/auth';
 
 // ─── Column definition ────────────────────────────────────────────────────────
 
 export interface Column<T> {
   key: string;
   header: string;
-  /** Width class e.g. "w-40" or "w-[120px]". Omit for auto. */
-  width?: string;
+  width?: string; // 'w-full' → primary; 'w-px' → collapse-to-content; 'w-[Xpx]' → fixed
+  align?: 'left' | 'center' | 'right';
+  /** Value extractor for CSV/Excel/PDF export. Return undefined to skip column in export. */
+  exportValue?: (row: T) => string | number | null | undefined;
   render: (row: T) => React.ReactNode;
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
-interface DataTableProps<T> {
+export interface DataTableProps<T> {
   columns: Column<T>[];
   rows: T[];
   rowKey: (row: T) => string;
   loading?: boolean;
-  /** Number of skeleton rows shown while loading. Default 6. */
   skeletonRows?: number;
   empty?: React.ReactNode;
-  /** Extra classes on the wrapping div */
+
+  // ── Card header ──
+  title?: string;
+  description?: string;
+  /** Always-visible search input — placed left of the funnel icon. */
+  search?: React.ReactNode;
+  /** Collapsible filter panel — shown/hidden by the funnel icon. */
+  filters?: React.ReactNode;
+  /** When true, the funnel icon shows an active dot indicator. */
+  filtersActive?: boolean;
+
+  // ── Bulk selection ──
+  selectable?: boolean;
+  selectedIds?: Set<string>;
+  onSelectionChange?: (ids: Set<string>) => void;
+
+  // ── Export ──
+  exportFilename?: string; // default: 'export'
+
+  // ── Inline pagination ──
+  page?: number;
+  pageSize?: number;
+  total?: number;
+  onPrev?: () => void;
+  onNext?: () => void;
+
   className?: string;
 }
 
-// ─── Loading skeleton ─────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function isActions(col: Column<unknown>): boolean { return col.key === 'actions'; }
+function isPrimary(col: Column<unknown>): boolean { return col.width === 'w-full'; }
+
+function effectiveAlign(col: Column<unknown>): 'left' | 'center' | 'right' {
+  if (col.align) return col.align;
+  if (isActions(col)) return 'right';
+  return 'left';
+}
+
+const ALIGN: Record<string, string> = { left: 'text-left', center: 'text-center', right: 'text-right' };
+
+function thWidth(col: Column<unknown>): string {
+  if (col.width === 'w-full') return 'w-full min-w-[160px]';
+  if (isActions(col)) return 'w-px';
+  if (col.width) return col.width;
+  return 'w-px';
+}
+
+// ─── Export utilities ─────────────────────────────────────────────────────────
+
+const BRAND = 'Safari Shule';
+const BRAND_TAGLINE = 'School Transport Management Platform';
+const BRAND_COLOR: [number, number, number] = [15, 118, 110]; // teal-700
+
+interface ExportMeta {
+  title: string;
+  generatedBy: string;   // full name + email
+  role: string;          // primary role display
+  tenant: string;        // tenant name
+  recordCount: number;
+  generatedAt: string;   // human-readable timestamp
+}
+
+function timestamp(): string {
+  return new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+}
+
+function stampedFilename(base: string): string {
+  return `${base}-${timestamp()}`;
+}
+
+function nowLabel(): string {
+  return new Date().toLocaleString('en-GB', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+}
+
+function getExportCols<T>(columns: Column<T>[]) {
+  return columns.filter((c) => c.exportValue !== undefined && !isActions(c as Column<unknown>));
+}
+
+function rowsToMatrix<T>(rows: T[], cols: Column<T>[], uppercaseHeader = false): (string | number)[][] {
+  const header = cols.map((c) => uppercaseHeader ? c.header.toUpperCase() : c.header);
+  const body = rows.map((row) =>
+    cols.map((c) => {
+      const v = c.exportValue!(row);
+      return v === null || v === undefined ? '' : v;
+    }),
+  );
+  return [header, ...body];
+}
+
+function exportCSV<T>(rows: T[], cols: Column<T>[], filename: string, meta: ExportMeta) {
+  // uppercaseHeader=true gives visual distinction since CSV has no font styling
+  const matrix = rowsToMatrix(rows, cols, true);
+  const lines = [
+    `# ============================================================`,
+    `# ${BRAND} — ${BRAND_TAGLINE}`,
+    `# ============================================================`,
+    `# Report:       ${meta.title}`,
+    `# Tenant:       ${meta.tenant}`,
+    `# Generated by: ${meta.generatedBy}`,
+    `# Role:         ${meta.role}`,
+    `# Generated at: ${meta.generatedAt}`,
+    `# Records:      ${meta.recordCount}`,
+    `# ============================================================`,
+    `#`,
+    ...matrix.map((row) =>
+      row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','),
+    ),
+  ];
+  // BOM ensures Excel / Numbers open UTF-8 correctly
+  const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${stampedFilename(filename)}.csv`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function exportExcel<T>(rows: T[], cols: Column<T>[], filename: string, meta: ExportMeta) {
+  const { utils, writeFile } = await import(/* @vite-ignore */ 'xlsx');
+
+  const matrix = rowsToMatrix(rows, cols);
+  const colCount = cols.length;
+
+  const headerMeta: (string | number)[][] = [
+    [BRAND, ...Array(colCount - 1).fill('')],
+    [BRAND_TAGLINE, ...Array(colCount - 1).fill('')],
+    ['', ...Array(colCount - 1).fill('')],
+    [`Report: ${meta.title}`, ...Array(colCount - 1).fill('')],
+    [`Tenant: ${meta.tenant}`, ...Array(colCount - 1).fill('')],
+    [`Generated by: ${meta.generatedBy}`, ...Array(colCount - 1).fill('')],
+    [`Role: ${meta.role}`, ...Array(colCount - 1).fill('')],
+    [`Generated at: ${meta.generatedAt}`, ...Array(colCount - 1).fill('')],
+    [`Records: ${meta.recordCount}`, ...Array(colCount - 1).fill('')],
+    Array(colCount).fill(''),
+  ];
+
+  const ws = utils.aoa_to_sheet([...headerMeta, ...matrix]);
+
+  ws['!cols'] = cols.map((_, i) => ({
+    wch: Math.max(
+      20,
+      ...[...headerMeta, ...matrix].map((r) => String(r[i] ?? '').length + 2),
+    ),
+  }));
+
+  ws['!merges'] = Array.from({ length: 9 }, (_, r) => ({
+    s: { r, c: 0 }, e: { r, c: colCount - 1 },
+  }));
+
+  // Style brand row
+  const brandCell = ws['A1'];
+  if (brandCell) brandCell.s = { font: { bold: true, sz: 16, color: { rgb: '0F766E' } } };
+
+  // Style column header row
+  const headerRow = headerMeta.length;
+  cols.forEach((_, ci) => {
+    const addr = utils.encode_cell({ r: headerRow, c: ci });
+    if (ws[addr]) ws[addr].s = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '0F766E' } }, alignment: { horizontal: 'center' } };
+  });
+
+  const wb = utils.book_new();
+  utils.book_append_sheet(wb, ws, meta.title.slice(0, 31));
+  writeFile(wb, `${stampedFilename(filename)}.xlsx`, { bookType: 'xlsx', cellStyles: true });
+}
+
+async function exportPDF<T>(rows: T[], cols: Column<T>[], filename: string, meta: ExportMeta) {
+  const { default: jsPDF } = await import(/* @vite-ignore */ 'jspdf');
+  const { default: autoTable } = await import(/* @vite-ignore */ 'jspdf-autotable');
+
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+
+  // ── Watermark ──
+  doc.saveGraphicsState();
+  (doc as any).setGState(new (doc as any).GState({ opacity: 0.05 }));
+  doc.setFontSize(52);
+  doc.setTextColor(15, 118, 110);
+  doc.text(BRAND, pageW / 2, pageH / 2, { align: 'center', angle: 35 });
+  doc.restoreGraphicsState();
+
+  // ── Header band ──
+  doc.setFillColor(...BRAND_COLOR);
+  doc.rect(0, 0, pageW, 22, 'F');
+
+  // Logo mark
+  doc.setFillColor(255, 255, 255);
+  doc.roundedRect(7, 4, 14, 14, 2, 2, 'F');
+  doc.setFontSize(10);
+  doc.setTextColor(...BRAND_COLOR);
+  doc.setFont('helvetica', 'bold');
+  doc.text('SS', 14, 13.5, { align: 'center' });
+
+  // Brand name + tagline
+  doc.setFontSize(14); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
+  doc.text(BRAND, 25, 10);
+  doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(200, 240, 236);
+  doc.text(BRAND_TAGLINE, 25, 15.5);
+
+  // Top-right meta
+  doc.setFontSize(7); doc.setTextColor(200, 240, 236);
+  doc.text(meta.generatedAt, pageW - 8, 8, { align: 'right' });
+  doc.text(`Tenant: ${meta.tenant}`, pageW - 8, 13, { align: 'right' });
+  doc.text(`Records: ${meta.recordCount}`, pageW - 8, 18, { align: 'right' });
+
+  // ── Report title ──
+  doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.setTextColor(20, 20, 20);
+  doc.text(meta.title, 8, 31);
+
+  // Meta sub-line
+  doc.setFontSize(7.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(80, 80, 80);
+  doc.text(
+    `Generated by: ${meta.generatedBy}  ·  Role: ${meta.role}  ·  ${meta.generatedAt}`,
+    8, 37,
+  );
+
+  // Accent line
+  doc.setDrawColor(...BRAND_COLOR); doc.setLineWidth(0.5);
+  doc.line(8, 39.5, pageW - 8, 39.5);
+
+  // ── Data table ──
+  autoTable(doc, {
+    startY: 42,
+    head: [cols.map((c) => c.header)],
+    body: rows.map((row) => cols.map((c) => String(c.exportValue!(row) ?? ''))),
+    headStyles: { fillColor: BRAND_COLOR, textColor: 255, fontStyle: 'bold', fontSize: 8, cellPadding: 3 },
+    bodyStyles: { fontSize: 8, cellPadding: 2.5 },
+    alternateRowStyles: { fillColor: [240, 253, 250] },
+    tableLineColor: [200, 235, 230], tableLineWidth: 0.2,
+    didDrawPage: (data: any) => {
+      const pg = doc.getNumberOfPages();
+      const cur = data.pageNumber;
+      doc.setFontSize(7); doc.setTextColor(150, 150, 150); doc.setFont('helvetica', 'normal');
+      doc.setDrawColor(210, 210, 210); doc.setLineWidth(0.2);
+      doc.line(8, pageH - 8, pageW - 8, pageH - 8);
+      doc.text(`${BRAND}  ·  ${meta.title}  ·  ${meta.tenant}`, 8, pageH - 4);
+      doc.text(`Page ${cur} of ${pg}  ·  Generated by ${meta.generatedBy}`, pageW - 8, pageH - 4, { align: 'right' });
+    },
+  });
+
+  doc.save(`${stampedFilename(filename)}.pdf`);
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function SkeletonRow({ cols }: { cols: number }) {
   return (
     <tr>
       {Array.from({ length: cols }).map((_, i) => (
-        <td key={i} className="py-3 pr-4">
-          <div className="h-4 w-3/4 animate-pulse rounded bg-muted" />
+        <td key={i} className="py-3 pr-4 first:pl-4">
+          <div className="h-4 animate-pulse rounded-md bg-muted/70"
+            style={{ width: i === 0 ? '65%' : i === cols - 1 ? '20px' : '75%' }} />
         </td>
       ))}
     </tr>
   );
 }
 
-// ─── Component ───────────────────────────────────────────────────────────────
+function PaginationStrip({ page, pageSize, total, onPrev, onNext }: {
+  page: number; pageSize: number; total: number; onPrev: () => void; onNext: () => void;
+}) {
+  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+  return (
+    <div className="flex items-center justify-between border-t border-border px-4 py-3">
+      <span className="text-xs text-muted-foreground">
+        {total === 0 ? 'No results' : `${from}–${to} of ${total.toLocaleString()}`}
+      </span>
+      <div className="flex gap-1">
+        <Button variant="outline" size="sm" onClick={onPrev} disabled={page <= 1} className="h-7 gap-1 px-2.5 text-xs">
+          <ChevronLeft className="h-3.5 w-3.5" /> Prev
+        </Button>
+        <Button variant="outline" size="sm" onClick={onNext} disabled={to >= total} className="h-7 gap-1 px-2.5 text-xs">
+          Next <ChevronRight className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Export menu ─────────────────────────────────────────────────────────────
+
+function ExportMenu<T>({ rows, exportCols, filename, title }: {
+  rows: T[]; exportCols: Column<T>[]; filename: string; title: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const storedUser = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
+
+  const { data: freshUser } = useQuery({
+    queryKey: ['me'],
+    queryFn: fetchMe,
+    enabled: !!storedUser && !storedUser.tenantName,
+    staleTime: 5 * 60 * 1000,
+  });
+  // Re-hydrate store when tenantName arrives from a fresh fetch
+  useEffect(() => {
+    if (freshUser && storedUser) setUser({ ...storedUser, ...freshUser });
+  }, [freshUser, storedUser, setUser]);
+
+  const user = storedUser?.tenantName ? storedUser : (freshUser ? { ...storedUser, ...freshUser } : storedUser);
+  if (exportCols.length === 0) return null;
+
+  const buildMeta = (count: number): ExportMeta => ({
+    title,
+    generatedBy: user ? `${user.fullName} (${user.email})` : 'Unknown',
+    role: humanizeRole(primaryRoleSlug(user?.roles)),
+    // Use tenantName from freshly fetched user; fall back to slug formatted; never show platform name for other tenants
+    tenant: user?.tenantName ?? (user?.tenantSlug ? user.tenantSlug.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : 'Unknown Tenant'),
+    recordCount: count,
+    generatedAt: nowLabel(),
+  });
+
+  const opts = [
+    { label: 'CSV',   icon: <FileText className="h-3.5 w-3.5" />, action: () => exportCSV(rows, exportCols, filename, buildMeta(rows.length)) },
+    { label: 'Excel', icon: <Sheet    className="h-3.5 w-3.5" />, action: () => exportExcel(rows, exportCols, filename, buildMeta(rows.length)) },
+    { label: 'PDF',   icon: <File     className="h-3.5 w-3.5" />, action: () => exportPDF(rows, exportCols, filename, buildMeta(rows.length)) },
+  ];
+
+  return (
+    <div className="relative">
+      <Button variant="outline" size="sm" onClick={() => setOpen((v) => !v)} className="h-9 gap-1.5 text-xs">
+        <Download className="h-3.5 w-3.5" /> Export
+      </Button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-10 z-50 min-w-[120px] overflow-hidden rounded-lg border border-border bg-card shadow-lg">
+            {opts.map(({ label, icon, action }) => (
+              <button key={label} onClick={() => { action(); setOpen(false); }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted">
+                {icon} {label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Bulk action bar ─────────────────────────────────────────────────────────
+
+function BulkBar<T>({ count, selectedIds, rows, rowKey, exportCols, filename, title, onClear }: {
+  count: number; selectedIds: Set<string>; rows: T[]; rowKey: (row: T) => string;
+  exportCols: Column<T>[]; filename: string; title: string; onClear: () => void;
+}) {
+  const selected = rows.filter((r) => selectedIds.has(rowKey(r)));
+  if (count === 0) return null;
+
+  return (
+    <div className="flex items-center justify-between border-b border-primary/20 bg-primary/5 px-4 py-2">
+      <div className="flex items-center gap-3">
+        <button onClick={onClear} className="text-xs font-medium text-primary hover:underline">
+          {count} row{count !== 1 ? 's' : ''} selected — clear
+        </button>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">Export selected:</span>
+        <ExportMenu rows={selected} exportCols={exportCols} filename={`${filename}-selected`} title={title} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export function DataTable<T>({
   columns,
   rows,
   rowKey,
   loading = false,
-  skeletonRows = 6,
+  skeletonRows = 8,
   empty,
+  title,
+  description,
+  search,
+  filters,
+  filtersActive = false,
+  selectable = false,
+  selectedIds: controlledIds,
+  onSelectionChange,
+  exportFilename = 'export',
+  page,
+  pageSize,
+  total,
+  onPrev,
+  onNext,
   className,
 }: DataTableProps<T>) {
-  return (
-    <div className={cn('overflow-x-auto', className)}>
-      <table className="min-w-full text-sm">
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [internalSelected, setInternalSelected] = useState<Set<string>>(new Set());
+
+  const selectedIds = controlledIds ?? internalSelected;
+  const setSelected = useCallback((ids: Set<string>) => {
+    setInternalSelected(ids);
+    onSelectionChange?.(ids);
+  }, [onSelectionChange]);
+
+  const hasPagination = page !== undefined && pageSize !== undefined && total !== undefined && onPrev && onNext;
+  const hasHeader = title || search || filters;
+  const exportCols = getExportCols(columns as Column<unknown>[]) as Column<T>[];
+  const hasExport = exportCols.length > 0;
+
+  // Selection helpers
+  const allIds = rows.map(rowKey);
+  const allSelected = allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
+  const someSelected = allIds.some((id) => selectedIds.has(id));
+
+  const toggleAll = () => {
+    if (allSelected) setSelected(new Set());
+    else setSelected(new Set(allIds));
+  };
+  const toggleRow = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelected(next);
+  };
+
+  // Prepend checkbox column when selectable
+  const effectiveCols: Column<T>[] = selectable
+    ? [{
+        key: '__select__',
+        header: '',
+        width: 'w-px',
+        render: (row) => {
+          const id = rowKey(row);
+          return (
+            <button onClick={() => toggleRow(id)} className="flex items-center text-muted-foreground hover:text-foreground">
+              {selectedIds.has(id) ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4" />}
+            </button>
+          );
+        },
+      }, ...columns]
+    : columns;
+
+  const table = (
+    <div className={cn('w-full overflow-x-auto', className)}>
+      {selectable && selectedIds.size > 0 && (
+        <BulkBar
+          count={selectedIds.size} selectedIds={selectedIds} rows={rows} rowKey={rowKey}
+          exportCols={exportCols} filename={exportFilename} title={title ?? 'Export'}
+          onClear={() => setSelected(new Set())}
+        />
+      )}
+      <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {columns.map((col) => (
-              <th key={col.key} className={cn('py-2 pr-4 font-medium', col.width)}>
-                {col.header}
+          <tr className="border-b border-border">
+            {selectable && (
+              <th className="w-px py-3 pl-4 pr-4">
+                <button onClick={toggleAll} className="flex items-center text-muted-foreground hover:text-foreground">
+                  {allSelected ? <CheckSquare className="h-4 w-4 text-primary" /> : someSelected ? <MinusSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4" />}
+                </button>
               </th>
-            ))}
+            )}
+            {columns.map((col) => {
+              const align = effectiveAlign(col as Column<unknown>);
+              const isAct = isActions(col as Column<unknown>);
+              return (
+                <th key={col.key} className={cn(
+                  'py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground first:pl-4',
+                  thWidth(col as Column<unknown>),
+                  ALIGN[align],
+                  isAct ? 'pl-2 pr-4' : 'pr-4',
+                )}>
+                  {isAct ? '' : col.header}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
           {loading ? (
             Array.from({ length: skeletonRows }).map((_, i) => (
-              <SkeletonRow key={i} cols={columns.length} />
+              <SkeletonRow key={i} cols={effectiveCols.length} />
             ))
           ) : rows.length === 0 ? (
             <tr>
-              <td colSpan={columns.length}>
-                {empty ?? (
-                  <div className="flex flex-col items-center gap-2 py-12 text-center text-sm text-muted-foreground">
-                    No records found.
-                  </div>
-                )}
+              <td colSpan={effectiveCols.length} className="py-0">
+                {empty ?? <div className="flex flex-col items-center gap-2 py-14 text-center text-sm text-muted-foreground">No records found.</div>}
               </td>
             </tr>
           ) : (
-            rows.map((row) => (
-              <tr
-                key={rowKey(row)}
-                className="border-b border-border/50 last:border-0 hover:bg-muted/20"
-              >
-                {columns.map((col) => (
-                  <td key={col.key} className="py-2.5 pr-4">
-                    {col.render(row)}
-                  </td>
-                ))}
-              </tr>
-            ))
+            rows.map((row) => {
+              const id = rowKey(row);
+              const isSelected = selectedIds.has(id);
+              return (
+                <tr key={id} className={cn(
+                  'border-b border-border/40 last:border-0 transition-colors hover:bg-muted/30',
+                  isSelected && 'bg-primary/5',
+                )}>
+                  {selectable && (
+                    <td className="w-px py-3 pl-4 pr-4">
+                      <button onClick={() => toggleRow(id)} className="flex items-center text-muted-foreground hover:text-foreground">
+                        {isSelected ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4" />}
+                      </button>
+                    </td>
+                  )}
+                  {columns.map((col) => {
+                    const align = effectiveAlign(col as Column<unknown>);
+                    const isAct = isActions(col as Column<unknown>);
+                    const primary = isPrimary(col as Column<unknown>);
+                    return (
+                      <td key={col.key} className={cn(
+                        'py-3 first:pl-4',
+                        ALIGN[align],
+                        !primary && !isAct && 'whitespace-nowrap',
+                        isAct ? 'pl-2 pr-4' : 'pr-4',
+                      )}>
+                        {col.render(row)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })
           )}
         </tbody>
       </table>
-
-      {loading && (
-        <div className="flex items-center justify-center py-4 text-xs text-muted-foreground gap-1.5">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
-        </div>
-      )}
     </div>
+  );
+
+  if (hasHeader) {
+    return (
+      <Card>
+        {/* ── Card header: title left · search + funnel right ── */}
+        <div className="flex flex-col border-b border-border">
+          <div className="flex items-center gap-3 px-4 py-3">
+            {/* Left: title + count */}
+            {title && (
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-semibold text-foreground leading-none">{title}</h3>
+                {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
+              </div>
+            )}
+            {/* Right: search · export · funnel */}
+            <div className="flex flex-1 items-center justify-end gap-2">
+              {/* Search grows to fill available space up to a reasonable max */}
+              <div className="flex-1 min-w-0 max-w-sm">
+                {search}
+              </div>
+              {hasExport && !selectable && (
+                <ExportMenu rows={rows} exportCols={exportCols} filename={exportFilename} title={title ?? 'Export'} />
+              )}
+              {filters && (
+                <button
+                  type="button"
+                  onClick={() => setFiltersOpen((v) => !v)}
+                  title={filtersOpen ? 'Hide filters' : 'Show filters'}
+                  className={cn(
+                    'relative flex h-9 w-9 shrink-0 items-center justify-center rounded-md border transition-colors',
+                    filtersOpen || filtersActive
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border bg-background text-muted-foreground hover:bg-muted',
+                  )}
+                >
+                  <Filter className="h-4 w-4" />
+                  {filtersActive && !filtersOpen && (
+                    <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-primary" />
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Collapsible filter panel */}
+          {filters && filtersOpen && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-border/60 bg-muted/20 px-4 py-3">
+              {filters}
+            </div>
+          )}
+        </div>
+
+        <CardContent className="p-0">
+          {table}
+          {hasPagination && (
+            <PaginationStrip page={page!} pageSize={pageSize!} total={total!} onPrev={onPrev!} onNext={onNext!} />
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      {table}
+      {hasPagination && (
+        <PaginationStrip page={page!} pageSize={pageSize!} total={total!} onPrev={onPrev!} onNext={onNext!} />
+      )}
+    </>
   );
 }

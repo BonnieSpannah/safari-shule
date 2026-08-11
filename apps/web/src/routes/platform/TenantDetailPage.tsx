@@ -343,9 +343,9 @@ export function TenantDetailPage() {
                       <tbody>
                         {t.vehicles.map((v: TenantVehicle) => (
                           <tr key={v.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
-                            <td className="py-2.5 pr-4 font-medium">{v.makeModel}</td>
-                            <td className="py-2.5 pr-4 font-mono text-xs text-muted-foreground">{v.registrationNumber}</td>
-                            <td className="py-2.5 pr-4 capitalize text-muted-foreground">{v.type}</td>
+                            <td className="py-2.5 pr-4 font-medium">{v.make} {v.model}</td>
+                            <td className="py-2.5 pr-4 font-mono text-xs text-muted-foreground">{v.registration}</td>
+                            <td className="py-2.5 pr-4 capitalize text-muted-foreground">{v.ownership}</td>
                             <td className="py-2.5 pr-4 text-muted-foreground">{v.capacity}</td>
                             <td className="py-2.5 text-xs text-muted-foreground">{format(new Date(v.createdAt), 'd MMM yyyy')}</td>
                           </tr>

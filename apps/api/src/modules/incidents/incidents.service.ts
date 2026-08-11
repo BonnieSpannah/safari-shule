@@ -41,7 +41,7 @@ export class IncidentsService {
     if (input.location) {
       await this.prisma.$executeRaw`
         INSERT INTO incidents
-          (id, tenant_id, trip_id, kind, severity, status, reported_by_user_id, description, location, occurred_at, created_at, updated_at)
+          (id, "tenantId", "tripId", kind, severity, status, "reportedByUserId", description, location, "occurredAt", "createdAt", "updatedAt")
         VALUES (
           ${id}::uuid,
           ${tenantId}::uuid,
@@ -60,7 +60,7 @@ export class IncidentsService {
     } else {
       await this.prisma.$executeRaw`
         INSERT INTO incidents
-          (id, tenant_id, trip_id, kind, severity, status, reported_by_user_id, description, occurred_at, created_at, updated_at)
+          (id, "tenantId", "tripId", kind, severity, status, "reportedByUserId", description, "occurredAt", "createdAt", "updatedAt")
         VALUES (
           ${id}::uuid,
           ${tenantId}::uuid,

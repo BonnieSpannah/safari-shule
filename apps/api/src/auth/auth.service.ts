@@ -134,7 +134,11 @@ export class AuthService {
         data: { lastLoginAt: new Date(), failedLoginCount: 0, lockedUntil: null },
       }),
     );
-    return this.issueTokenPair(user, meta);
+    const tokenPair = await this.issueTokenPair(user, meta);
+    return {
+      ...tokenPair,
+      user: { ...tokenPair.user, tenantName: tenant.name, tenantSlug: tenant.slug },
+    };
   }
 
   private assertTenantLoginAllowed(status: string): void {
@@ -326,6 +330,10 @@ export class AuthService {
       ),
     ).sort();
 
+    const tenant = await runWithBypass(() =>
+      this.prisma.tenant.findUnique({ where: { id: user.tenantId }, select: { name: true, slug: true } }),
+    );
+
     const maxAgeDays = this.config.get<number>('app.security.passwordMaxAgeDays') ?? 90;
     const passwordExpiresAt = new Date(
       user.passwordUpdatedAt.getTime() + maxAgeDays * 86400 * 1000,
@@ -351,6 +359,8 @@ export class AuthService {
       roles,
       permissions,
       preferences: this.mergePreferences(user.preferences),
+      tenantName: tenant?.name ?? null,
+      tenantSlug: tenant?.slug ?? null,
     };
   }
 

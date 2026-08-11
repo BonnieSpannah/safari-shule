@@ -46,7 +46,7 @@ describe('SOS incident flow (e2e)', () => {
 
       const routeId = randomUUID();
       await prisma.$executeRaw`
-        INSERT INTO routes (id, tenant_id, name, description, is_active, start_point, end_point, created_at, updated_at)
+        INSERT INTO routes (id, "tenantId", name, description, "isActive", "startPoint", "endPoint", "createdAt", "updatedAt")
         VALUES (
           ${routeId}::uuid, ${tenant.tenantId}::uuid, 'SOS Route', 'sos test route', true,
           ST_SetSRID(ST_MakePoint(36.8219, -1.2864), 4326)::geography,
@@ -82,6 +82,7 @@ describe('SOS incident flow (e2e)', () => {
       .set('Authorization', `Bearer ${tenant.driverAccessToken}`)
       .set('x-tenant-id', tenant.tenantId)
       .send({
+        tripId,
         description: 'Vehicle stopped, hazard lights on, driver requesting help.',
         location: { lat: -1.2864, lng: 36.8219 },
       });
@@ -114,6 +115,7 @@ describe('SOS incident flow (e2e)', () => {
       .set('Authorization', `Bearer ${tenant.driverAccessToken}`)
       .set('x-tenant-id', tenant.tenantId)
       .send({
+        tripId,
         description: 'Test - no contacts',
         location: { lat: -1.2864, lng: 36.8219 },
       });
