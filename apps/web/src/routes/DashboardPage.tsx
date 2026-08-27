@@ -1,4 +1,4 @@
-import { Bus, Route as RouteIcon, Users, Siren, GraduationCap, UserCog, CalendarCheck, MapPin } from 'lucide-react';
+import { Bus, Route as RouteIcon, Users, Siren, GraduationCap, UserCog, CalendarCheck } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAuthStore } from '@/stores/auth.store';
 import { getDashboardStats } from '@/lib/api/dashboard';
+import { LiveTripsMapCard } from './dashboard/LiveTripsMapCard';
 
 const TONE_CLASSES: Record<string, string> = {
   blue: 'bg-blue-500/10 text-blue-600',
@@ -62,18 +63,7 @@ export function DashboardPage() {
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Live map</CardTitle>
-            <CardDescription>Vehicle locations reported in the last 60 seconds.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex h-72 flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border bg-surface-3">
-              <MapPin className="h-8 w-8 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">Live map arrives with Socket.IO integration in the next milestone.</p>
-            </div>
-          </CardContent>
-        </Card>
+        <LiveTripsMapCard />
 
         <Card>
           <CardHeader>

@@ -3,6 +3,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { runWithBypass } from '../../common/context/request-context';
 import { CommunicationsService } from '../../comms/communications.service';
 import { renderTemplate } from '../../comms/templates/registry';
+import { MetricsService } from '../../common/metrics/metrics.service';
 
 export interface RfidScanInput {
   tenantId: string;
@@ -19,10 +20,12 @@ export class HardwareService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly comms: CommunicationsService,
+    private readonly metrics: MetricsService,
   ) {}
 
   async ingestScan(input: RfidScanInput) {
-    return runWithBypass(async () => {
+    try {
+      const result = await runWithBypass(async () => {
       const tag = await this.prisma.rfidTag.findUnique({
         where: { tenantId_tagUid: { tenantId: input.tenantId, tagUid: input.tagUid } },
         include: { student: true },
@@ -105,7 +108,25 @@ export class HardwareService {
         tripId: activeTrip.id,
         notificationsQueued: queued,
       };
-    });
+      });
+      this.metrics.recordRfidScan('accepted');
+      return result;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        const response = error.getResponse() as { code?: string } | string;
+        const code = typeof response === 'string' ? undefined : response?.code;
+        if (code === 'UNKNOWN_TAG') {
+          this.metrics.recordRfidScan('unknown_tag');
+        } else if (code === 'NO_ACTIVE_TRIP_FOR_DEVICE') {
+          this.metrics.recordRfidScan('no_active_trip');
+        } else {
+          this.metrics.recordRfidScan('failed');
+        }
+      } else {
+        this.metrics.recordRfidScan('failed');
+      }
+      throw error;
+    }
   }
 
   async ingestGps(input: {

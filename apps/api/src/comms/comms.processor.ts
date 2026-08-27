@@ -5,6 +5,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { runWithBypass } from '../common/context/request-context';
 import { CommunicationsService } from './communications.service';
 import { COMMS_QUEUE, SMS_PROVIDER, EMAIL_PROVIDER, type SmsProvider, type EmailProvider } from './tokens';
+import { MetricsService } from '../common/metrics/metrics.service';
 
 @Processor(COMMS_QUEUE, { concurrency: 8 })
 export class CommsProcessor extends WorkerHost {
@@ -13,6 +14,7 @@ export class CommsProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly comms: CommunicationsService,
+    private readonly metrics: MetricsService,
     @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,
     @Inject(EMAIL_PROVIDER) private readonly email: EmailProvider,
   ) {
@@ -38,6 +40,7 @@ export class CommsProcessor extends WorkerHost {
             data: { status: 'quota_exceeded' as any, error: 'SMS quota exceeded for current month.' },
           }),
         );
+        this.metrics.recordOutboundMessage('sms', 'quota_exceeded');
         return;
       }
       try {
@@ -53,8 +56,10 @@ export class CommsProcessor extends WorkerHost {
             },
           }),
         );
+        this.metrics.recordOutboundMessage('sms', 'sent');
       } catch (err) {
         await this.markFailed(msg.id, err);
+        this.metrics.recordOutboundMessage('sms', 'failed');
         throw err;
       }
       return;
@@ -79,8 +84,10 @@ export class CommsProcessor extends WorkerHost {
             },
           }),
         );
+        this.metrics.recordOutboundMessage('email', 'sent');
       } catch (err) {
         await this.markFailed(msg.id, err);
+        this.metrics.recordOutboundMessage('email', 'failed');
         throw err;
       }
     }

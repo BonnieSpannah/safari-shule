@@ -37,6 +37,7 @@ export class TelemetryController {
       occurredAt: new Date(body.timestamp),
     });
     this.gateway.broadcastLocation(tenantId, id, {
+      tripId: id,
       lat: body.lat,
       lng: body.lng,
       heading_degrees: body.heading_degrees,

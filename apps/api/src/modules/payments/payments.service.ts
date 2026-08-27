@@ -3,6 +3,20 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { getContext, requireTenantId, runWithBypass } from '../../common/context/request-context';
 import { MPESA_PROVIDER, type MpesaProvider } from './tokens';
+import { buildPagination, paginated } from '../../common/pagination/pagination';
+import { MetricsService } from '../../common/metrics/metrics.service';
+
+interface ListInput {
+  page: number;
+  pageSize: number;
+  q?: string;
+  sort?: string;
+  status?: 'initiated' | 'succeeded' | 'failed' | 'cancelled';
+  purpose?: 'fuel' | 'repair';
+  from?: Date;
+  to?: Date;
+  scopeTenantId: string | null;
+}
 
 interface InitiateInput {
   purpose: 'fuel' | 'repair';
@@ -20,8 +34,66 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly metrics: MetricsService,
     @Inject(MPESA_PROVIDER) private readonly mpesa: MpesaProvider,
   ) {}
+
+  async list(input: ListInput) {
+    const where: any = {};
+    if (input.scopeTenantId) where.tenantId = input.scopeTenantId;
+    if (input.status) where.status = input.status as any;
+    if (input.purpose) where.purpose = input.purpose as any;
+    if (input.q) {
+      where.OR = [
+        { phoneE164: { contains: input.q, mode: 'insensitive' } },
+        { accountReference: { contains: input.q, mode: 'insensitive' } },
+        { checkoutRequestId: { contains: input.q, mode: 'insensitive' } },
+        { mpesaReceiptNumber: { contains: input.q, mode: 'insensitive' } },
+      ];
+    }
+    if (input.from || input.to) {
+      where.initiatedAt = {};
+      if (input.from) where.initiatedAt.gte = input.from;
+      if (input.to) where.initiatedAt.lte = input.to;
+    }
+
+    const [total, data] = await Promise.all([
+      this.prisma.mpesaTransaction.count({ where }),
+      this.prisma.mpesaTransaction.findMany({
+        where,
+        ...buildPagination({
+          page: input.page,
+          pageSize: input.pageSize,
+          q: input.q,
+          sort: input.sort ?? 'initiatedAt:desc',
+        }),
+        include: {
+          tenant: { select: { id: true, name: true, slug: true } },
+        },
+      }),
+    ]);
+
+    return paginated(data, total, {
+      page: input.page,
+      pageSize: input.pageSize,
+      q: input.q,
+      sort: input.sort,
+    });
+  }
+
+  async byId(id: string, scopeTenantId: string | null) {
+    const where: any = { id };
+    if (scopeTenantId) where.tenantId = scopeTenantId;
+
+    const txn = await this.prisma.mpesaTransaction.findFirst({
+      where,
+      include: {
+        tenant: { select: { id: true, name: true, slug: true } },
+      },
+    });
+    if (!txn) throw new NotFoundException('Payment transaction not found');
+    return txn;
+  }
 
   async initiate(input: InitiateInput) {
     const tenantId = requireTenantId();
@@ -48,6 +120,7 @@ export class PaymentsService {
         status: 'initiated' as any,
       },
     });
+    this.metrics.recordMpesaTransaction(input.purpose, 'initiated');
 
     if (input.fuelLogId) {
       await this.prisma.fuelLog.update({
@@ -94,6 +167,7 @@ export class PaymentsService {
           completedAt: transactionDate ? mpesaDateToDate(String(transactionDate)) : new Date(),
         },
       });
+      this.metrics.recordMpesaTransaction(txn.purpose as 'fuel' | 'repair', resultCode === 0 ? 'succeeded' : 'failed');
       if (resultCode === 0) {
         const fuel = await this.prisma.fuelLog.findFirst({ where: { mpesaTransactionId: txn.id } });
         if (fuel) {

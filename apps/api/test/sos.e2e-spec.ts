@@ -14,6 +14,7 @@ describe('SOS incident flow (e2e)', () => {
   let auth: AuthService;
   let tenant: SeededTenant;
   let tripId: string;
+  let lastIncidentId: string;
 
   beforeAll(async () => {
     ({ app, prisma, tenantAdmin, auth } = await bootstrapTestApp());
@@ -102,6 +103,30 @@ describe('SOS incident flow (e2e)', () => {
     expect(incidents.length).toBe(1);
     expect(incidents[0]!.severity).toBe('critical');
     expect(incidents[0]!.status).toBe('reported');
+    lastIncidentId = incidents[0]!.id;
+  });
+
+  it('incident detail endpoint returns the selected incident', async () => {
+    const res = await request(app.getHttpServer())
+      .get(`/v1/incidents/${lastIncidentId}`)
+      .set('Authorization', `Bearer ${tenant.driverAccessToken}`)
+      .set('x-tenant-id', tenant.tenantId);
+
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe(lastIncidentId);
+    expect(res.body.tripId).toBe(tripId);
+  });
+
+  it('incident notifications endpoint returns SOS SMS records', async () => {
+    const res = await request(app.getHttpServer())
+      .get(`/v1/incidents/${lastIncidentId}/notifications`)
+      .set('Authorization', `Bearer ${tenant.driverAccessToken}`)
+      .set('x-tenant-id', tenant.tenantId);
+
+    expect(res.status).toBe(200);
+    expect(res.body.incidentId).toBe(lastIncidentId);
+    expect(Array.isArray(res.body.messages)).toBe(true);
+    expect(res.body.messages.length).toBeGreaterThanOrEqual(1);
   });
 
   it('SOS without a registered emergency contact still persists the incident', async () => {

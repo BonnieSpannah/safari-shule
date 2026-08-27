@@ -7,7 +7,6 @@ import { ForgotPasswordPage } from './ForgotPasswordPage';
 import { ResetPasswordPage } from './ResetPasswordPage';
 import { ActivatePage } from './ActivatePage';
 import { DashboardPage } from './DashboardPage';
-import { PlaceholderPage } from './PlaceholderPage';
 import { NotFoundPage } from './NotFoundPage';
 import { TenantsPage } from './platform/TenantsPage';
 import { TenantDetailPage } from './platform/TenantDetailPage';
@@ -19,6 +18,8 @@ import { ParentsPage } from './parents/ParentsPage';
 import { TripsPage } from './trips/TripsPage';
 import { HardwarePage } from './hardware/HardwarePage';
 import { AuditPage } from './audit/AuditPage';
+import { IncidentsPage } from './incidents/IncidentsPage';
+import { PaymentsPage } from './payments/PaymentsPage';
 import { ProfilePage } from './me/ProfilePage';
 import { SecurityPage } from './me/SecurityPage';
 import { PreferencesPage } from './me/PreferencesPage';
@@ -85,38 +86,24 @@ export const router = createBrowserRouter([
       {
         path: 'trips',
         element: (
-          <PlaceholderPage
-            title="Trips"
-            description="Live trip tracking, attendance timeline and dispatch history."
-            eta="Live trips + WebSocket telemetry ships in M2."
-          />
+          <PermissionGate anyOf={['trips.view', 'trips.dispatch']}>
+            <TripsPage />
+          </PermissionGate>
         ),
       },
       {
         path: 'incidents',
         element: (
-          <PlaceholderPage
-            title="Incidents"
-            description="SOS events, resolution timeline and emergency contacts."
-            eta="Incident console ships in M2."
-          />
+          <PermissionGate anyOf={['incidents.view', 'incidents.list']}>
+            <IncidentsPage />
+          </PermissionGate>
         ),
       },
       {
         path: 'payments',
         element: (
-          <PlaceholderPage
-            title="Payments"
-            description="M-Pesa transactions for fuel and repairs."
-            eta="Payments ledger ships in M2."
-          />
-        ),
-      },
-      {
-        path: 'trips',
-        element: (
-          <PermissionGate anyOf={['trips.view', 'trips.dispatch']}>
-            <TripsPage />
+          <PermissionGate anyOf={['payments.view', 'payments.list']}>
+            <PaymentsPage />
           </PermissionGate>
         ),
       },

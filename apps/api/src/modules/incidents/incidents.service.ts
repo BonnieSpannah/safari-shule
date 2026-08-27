@@ -33,6 +33,55 @@ export class IncidentsService {
     return paginated(data, total, q);
   }
 
+  async byId(id: string) {
+    const tenantId = requireTenantId();
+    const incident = await this.prisma.incident.findFirst({
+      where: { id, tenantId },
+      include: {
+        trip: {
+          select: {
+            id: true,
+            route: { select: { id: true, name: true } },
+            vehicle: { select: { id: true, registration: true } },
+          },
+        },
+      },
+    });
+    if (!incident) throw new NotFoundException('Incident not found');
+    return incident;
+  }
+
+  async notificationLog(id: string) {
+    const tenantId = requireTenantId();
+    const incident = await this.prisma.incident.findFirst({ where: { id, tenantId } });
+    if (!incident) throw new NotFoundException('Incident not found');
+
+    const windowStart = new Date(incident.occurredAt.getTime() - 15 * 60 * 1000);
+    const windowEnd = new Date(incident.occurredAt.getTime() + 15 * 60 * 1000);
+
+    const messages = await runWithBypass(() =>
+      this.prisma.outboundMessage.findMany({
+        where: {
+          tenantId,
+          channel: 'sms',
+          templateId: 'sos.alert',
+          createdAt: { gte: windowStart, lte: windowEnd },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          to: true,
+          status: true,
+          error: true,
+          providerMessageId: true,
+          createdAt: true,
+        },
+      }),
+    );
+
+    return { incidentId: incident.id, messages };
+  }
+
   async create(input: IncidentInput) {
     const tenantId = requireTenantId();
     const reportedByUserId = getContext()?.userId ?? null;

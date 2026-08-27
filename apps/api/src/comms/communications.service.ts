@@ -5,6 +5,7 @@ import { COMMS_QUEUE } from './tokens';
 import { FeatureFlagService } from '../feature-flags/feature-flag.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { runWithBypass, getContext } from '../common/context/request-context';
+import { MetricsService } from '../common/metrics/metrics.service';
 
 export interface SendSmsInput {
   tenantId: string;
@@ -32,9 +33,30 @@ export class CommunicationsService {
     @InjectQueue(COMMS_QUEUE) private readonly queue: Queue,
     private readonly flags: FeatureFlagService,
     private readonly prisma: PrismaService,
+    private readonly metrics: MetricsService,
   ) {}
 
   async sendSms(input: SendSmsInput): Promise<{ id: string }> {
+    const suppressed = await this.isDncSuppressed(input.tenantId, 'sms', input.to);
+    if (suppressed) {
+      const suppressedMsg = await runWithBypass(() =>
+        this.prisma.outboundMessage.create({
+          data: {
+            tenantId: input.tenantId,
+            channel: 'sms' as any,
+            to: input.to,
+            templateId: input.templateId,
+            body: input.body,
+            status: 'failed' as any,
+            error: 'Suppressed by do-not-contact policy.',
+            requestId: getContext()?.requestId ?? null,
+          },
+        }),
+      );
+      this.metrics.recordOutboundMessage('sms', 'suppressed');
+      return { id: suppressedMsg.id };
+    }
+
     const msg = await runWithBypass(() =>
       this.prisma.outboundMessage.create({
         data: {
@@ -47,6 +69,7 @@ export class CommunicationsService {
         },
       }),
     );
+    this.metrics.recordOutboundMessage('sms', 'queued');
     await this.queue.add(
       'sms',
       { messageId: msg.id },
@@ -90,6 +113,26 @@ export class CommunicationsService {
   }
 
   async sendEmail(input: SendEmailInput): Promise<{ id: string }> {
+    const suppressed = await this.isDncSuppressed(input.tenantId, 'email', input.to);
+    if (suppressed) {
+      const suppressedMsg = await runWithBypass(() =>
+        this.prisma.outboundMessage.create({
+          data: {
+            tenantId: input.tenantId,
+            channel: 'email' as any,
+            to: input.to,
+            templateId: input.templateId,
+            body: input.html,
+            status: 'failed' as any,
+            error: 'Suppressed by do-not-contact policy.',
+            requestId: getContext()?.requestId ?? null,
+          },
+        }),
+      );
+      this.metrics.recordOutboundMessage('email', 'suppressed');
+      return { id: suppressedMsg.id };
+    }
+
     const msg = await runWithBypass(() =>
       this.prisma.outboundMessage.create({
         data: {
@@ -102,6 +145,7 @@ export class CommunicationsService {
         },
       }),
     );
+    this.metrics.recordOutboundMessage('email', 'queued');
     await this.queue.add(
       'email',
       {
@@ -132,5 +176,23 @@ export class CommunicationsService {
       }),
     );
     return used < quota;
+  }
+
+  private async isDncSuppressed(tenantId: string, channel: 'sms' | 'email', destination: string): Promise<boolean> {
+    const now = new Date();
+    const policy = await runWithBypass(() =>
+      this.prisma.doNotContact.findFirst({
+        where: {
+          tenantId,
+          destination,
+          AND: [
+            { OR: [{ channel: channel as any }, { channel: 'all' as any }] },
+            { effectiveFrom: { lte: now } },
+            { OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }] },
+          ],
+        },
+      }),
+    );
+    return !!policy;
   }
 }

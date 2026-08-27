@@ -12,6 +12,7 @@ import { redisOptions } from './config/redis.config';
 
 import { PrismaModule } from './common/prisma/prisma.module';
 import { RedisModule } from './common/redis/redis.module';
+import { MetricsModule } from './common/metrics/metrics.module';
 import { TenantContextModule } from './common/tenant/tenant-context.module';
 import { TenantMiddleware } from './common/tenant/tenant.middleware';
 import { RequestContextMiddleware } from './common/context/request-context.middleware';
@@ -70,6 +71,7 @@ import { DashboardController } from './modules/dashboard/dashboard.controller';
 
     PrismaModule,
     RedisModule,
+    MetricsModule,
     TenantContextModule,
     RbacModule,
     FeatureFlagsModule,

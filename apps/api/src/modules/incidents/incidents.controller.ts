@@ -29,6 +29,18 @@ export class IncidentsController {
     return this.svc.list(q);
   }
 
+  @Get('incidents/:id')
+  @RequirePermission('incidents.view')
+  one(@Param('id') id: string) {
+    return this.svc.byId(id);
+  }
+
+  @Get('incidents/:id/notifications')
+  @RequirePermission('incidents.view')
+  notifications(@Param('id') id: string) {
+    return this.svc.notificationLog(id);
+  }
+
   @Post('incidents')
   @RequirePermission('incidents.report')
   @Audited({ action: 'incident.create', entityType: 'incident' })
