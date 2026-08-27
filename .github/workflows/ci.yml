@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Lint, Typecheck, Build, Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @safari-shule/api exec prisma generate
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck API tests
+        run: pnpm --filter @safari-shule/api exec tsc --noEmit -p test/tsconfig.test.json
+
+      - name: Typecheck Web
+        run: pnpm --filter @safari-shule/web run typecheck
+
+      - name: Build API
+        run: pnpm --filter @safari-shule/api run build
+
+      - name: Build Web
+        run: pnpm --filter @safari-shule/web run build
+
+      - name: Unit tests
+        run: pnpm test

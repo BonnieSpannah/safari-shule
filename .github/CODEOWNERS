@@ -1,0 +1,8 @@
+# Default owner for all files
+* @BonnieSpannah
+
+# Sensitive backend domains requiring extra review
+apps/api/src/auth/ @BonnieSpannah
+apps/api/src/modules/payments/ @BonnieSpannah
+apps/api/src/modules/hardware/ @BonnieSpannah
+apps/api/prisma/ @BonnieSpannah
