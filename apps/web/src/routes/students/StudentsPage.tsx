@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -14,12 +14,14 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { FormModal } from '@/components/ui/form-modal';
 import { FormField } from '@/components/ui/form-field';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
 import { TenantSelectorField } from '@/components/ui/tenant-selector-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { usePermission } from '@/hooks/usePermission';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useClientEvents } from '@/hooks/useClientEvents';
 import { useTenantFilter, TenantBadge, TenantFilterSelect } from '@/hooks/useTenantFilter';
 import { listStudents, createStudent, updateStudent, deleteStudent, type Student } from '@/lib/api/students';
 
@@ -38,9 +40,14 @@ const schema = z.object({
 type Form = z.infer<typeof schema>;
 
 export function StudentsPage() {
+  const { emit } = useClientEvents();
   const canCreate = usePermission('students.create');
   const { isSuperAdmin, tenants } = useTenantFilter();
   const qc = useQueryClient();
+
+  useEffect(() => {
+    emit('view', { entityType: 'student_list' });
+  }, [emit]);
   const [search, setSearch] = useState(''); const [genderFilter, setGenderFilter] = useState(''); const [tenantFilter, setTenantFilter] = useState(''); const [page, setPage] = useState(1);
   const [dialogOpen, setDialogOpen] = useState(false); const [editing, setEditing] = useState<Student | null>(null); const [deleteTarget, setDeleteTarget] = useState<Student | null>(null);
   const dSearch = useDebounce(search, 300);
@@ -50,10 +57,10 @@ export function StudentsPage() {
   const form = useForm<Form>({ resolver: zodResolver(schema), mode: 'onChange' });
 
   const openCreate = () => { setEditing(null); form.reset({}); setDialogOpen(true); };
-  const openEdit = (s: Student) => { setEditing(s); form.reset({ legalName: s.legalName, admissionNumber: s.admissionNumber, dateOfBirth: s.dateOfBirth.slice(0, 10), gender: s.gender as any, classroom: s.classroom ?? '', birthCertificateNumber: s.birthCertificateNumber ?? '' }); setDialogOpen(true); };
+  const openEdit = (s: Student) => { setEditing(s); form.reset({ legalName: s.legalName, admissionNumber: s.admissionNumber, dateOfBirth: s.dateOfBirth.slice(0, 10), gender: s.gender as 'male' | 'female' | 'other', classroom: s.classroom ?? '', birthCertificateNumber: s.birthCertificateNumber ?? '' }); setDialogOpen(true); };
 
   const saveMutation = useMutation({
-    mutationFn: (v: Form) => editing ? updateStudent(editing.id, { legalName: v.legalName, admissionNumber: v.admissionNumber, dateOfBirth: v.dateOfBirth, gender: v.gender, classroom: v.classroom || null, birthCertificateNumber: v.birthCertificateNumber || null, flexibleAttributes: {} }) : createStudent({ legalName: v.legalName, admissionNumber: v.admissionNumber, dateOfBirth: v.dateOfBirth, gender: v.gender, classroom: v.classroom || null, birthCertificateNumber: v.birthCertificateNumber || null, flexibleAttributes: {}, targetTenantId: v.targetTenantId } as any),
+    mutationFn: (v: Form) => editing ? updateStudent(editing.id, { legalName: v.legalName, admissionNumber: v.admissionNumber, dateOfBirth: v.dateOfBirth, gender: v.gender, classroom: v.classroom || null, birthCertificateNumber: v.birthCertificateNumber || null, flexibleAttributes: {} }) : createStudent({ legalName: v.legalName, admissionNumber: v.admissionNumber, dateOfBirth: v.dateOfBirth, gender: v.gender, classroom: v.classroom || null, birthCertificateNumber: v.birthCertificateNumber || null, flexibleAttributes: {}, targetTenantId: v.targetTenantId }),
     onSuccess: () => { toast.success(editing ? 'Student updated.' : 'Student enrolled.'); setDialogOpen(false); qc.invalidateQueries({ queryKey: ['students'] }); },
     onError: () => toast.error('Could not save student.'),
   });
@@ -78,6 +85,15 @@ export function StudentsPage() {
     <div className="space-y-5">
       <PageHeader title="Students" description="Enrolled students, class assignments and guardian links." actions={canCreate ? <Button onClick={openCreate} size="sm" className="gap-1.5 bg-green-600 hover:bg-green-700"><Plus className="h-4 w-4" />Enrol student</Button> : undefined} />
 
+      {query.error && (
+        <ErrorState
+          title="Failed to load students"
+          error={query.error}
+          onRetry={() => query.refetch()}
+        />
+      )}
+
+      {!query.error && (
       <DataTable
         title="All students"
         description={total > 0 ? `${total} student${total !== 1 ? 's' : ''}` : undefined}
@@ -89,6 +105,7 @@ export function StudentsPage() {
         columns={columns} rows={students} rowKey={(s) => s.id} loading={query.isLoading} skeletonRows={PAGE_SIZE}
         empty={<EmptyState icon={<GraduationCap className="h-6 w-6" />} title="No students found" description={canCreate ? 'Enrol the first student above.' : undefined} />}
       />
+      )}
 
       <FormModal open={dialogOpen} onClose={() => setDialogOpen(false)} title={editing ? `Edit — ${editing.legalName}` : 'Enrol student'} subtitle="Student enrolment and demographic details" onSubmit={form.handleSubmit((v) => saveMutation.mutate(v))} submitLabel={editing ? 'Save changes' : 'Enrol student'} submitting={saveMutation.isPending}>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -96,7 +113,7 @@ export function StudentsPage() {
           <FormField label="Full name" required error={form.formState.errors.legalName?.message}><Input placeholder="Jane Wanjiku" {...form.register('legalName')} /></FormField>
           <FormField label="Admission #" required error={form.formState.errors.admissionNumber?.message}><Input placeholder="ADM-2024-001" {...form.register('admissionNumber')} /></FormField>
           <FormField label="Date of birth" required error={form.formState.errors.dateOfBirth?.message}><Input type="date" {...form.register('dateOfBirth')} /></FormField>
-          <FormField label="Gender" required error={form.formState.errors.gender?.message}><SearchableSelect options={GENDER_OPTIONS} value={form.watch('gender') ?? ''} onChange={(v) => form.setValue('gender', v as any)} placeholder="Select gender" /></FormField>
+          <FormField label="Gender" required error={form.formState.errors.gender?.message}><SearchableSelect options={GENDER_OPTIONS} value={form.watch('gender') ?? ''} onChange={(v) => form.setValue('gender', v as 'male' | 'female' | 'other')} placeholder="Select gender" /></FormField>
           <FormField label="Class" error={form.formState.errors.classroom?.message}><Input placeholder="Grade 5" {...form.register('classroom')} /></FormField>
           <FormField label="Birth cert #" error={form.formState.errors.birthCertificateNumber?.message}><Input placeholder="BRT-001" {...form.register('birthCertificateNumber')} /></FormField>
         </div>

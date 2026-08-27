@@ -108,8 +108,8 @@ export function TenantsPage() {
   const [search, setSearch] = useState('');
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [planFilters, setPlanFilters] = useState<string[]>([]);
-  const [createdFrom, setCreatedFrom] = useState<string>(() => format(subDays(new Date(), 30), 'yyyy-MM-dd'));
-  const [createdTo, setCreatedTo] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
+  const [createdFrom, setCreatedFrom] = useState<string>('');
+  const [createdTo, setCreatedTo] = useState<string>('');
   const [openDropdown, setOpenDropdown] = useState<'status' | 'plan' | 'date' | null>(null);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
@@ -145,9 +145,8 @@ export function TenantsPage() {
 
   const toggleStatus = (s: string) => setFilter(() => setStatusFilters((p) => p.includes(s) ? p.filter((x) => x !== s) : [...p, s]));
   const togglePlan = (p: string) => setFilter(() => setPlanFilters((prev) => prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
-  const defaultFrom = format(subDays(new Date(), 30), 'yyyy-MM-dd');
-  const hasActiveFilters = statusFilters.length > 0 || planFilters.length > 0 || createdFrom !== defaultFrom || createdTo !== todayStr;
-  const resetFilters = () => setFilter(() => { setStatusFilters([]); setPlanFilters([]); setCreatedFrom(defaultFrom); setCreatedTo(todayStr); });
+  const hasActiveFilters = statusFilters.length > 0 || planFilters.length > 0 || createdFrom !== '' || createdTo !== '';
+  const resetFilters = () => setFilter(() => { setStatusFilters([]); setPlanFilters([]); setCreatedFrom(''); setCreatedTo(''); });
 
   const activeFilterLabels = useMemo(() => {
     const labels: string[] = [];
@@ -628,7 +627,7 @@ export function TenantsPage() {
 
             <div className="relative">
               <button type="button" onClick={() => setOpenDropdown(openDropdown === 'date' ? null : 'date')}
-                className={`flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors ${(createdFrom !== defaultFrom || createdTo !== todayStr) ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'}`}>
+                className={`flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors ${(createdFrom !== '' || createdTo !== '') ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'}`}>
                 <CalendarDays className="h-3.5 w-3.5" />
                 {createdFrom && createdTo ? `${format(new Date(createdFrom + 'T12:00:00'), 'd MMM')} – ${format(new Date(createdTo + 'T12:00:00'), 'd MMM yyyy')}` : createdFrom ? `From ${format(new Date(createdFrom + 'T12:00:00'), 'd MMM yyyy')}` : 'All time'}
                 <ChevronDown className="h-3 w-3 opacity-60" />
@@ -720,7 +719,7 @@ export function TenantsPage() {
 // ─── Shared school form fields ────────────────────────────────────────────────
 
 function SchoolFields({
-  register, control, errors, slug, contactEmail, currentSubdomain, currentAdminEmail, setValue, readOnlySlug,
+  register, control, errors, slug, contactEmail: _contactEmail, currentSubdomain, currentAdminEmail, setValue, readOnlySlug,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   register: any; control: any; setValue: any;
@@ -858,7 +857,7 @@ function PreviewRow({ label, value, mono, sensitive }: {
   );
 }
 
-function CredentialRow({ label, value, sensitive }: { label: string; value: string; sensitive?: boolean }) {
+function CredentialRow({ label, value, sensitive: _sensitive }: { label: string; value: string; sensitive?: boolean }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="flex items-center gap-3">
@@ -882,14 +881,6 @@ function PlanBadge({ tier }: { tier: PlanTier }) {
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset capitalize ${styles[tier]}`}>
       {tier}
     </span>
-  );
-}
-
-function ListSkeleton() {
-  return (
-    <div className="space-y-2">
-      {[0, 1, 2].map((i) => <div key={i} className="h-14 animate-pulse rounded-md bg-muted/40" />)}
-    </div>
   );
 }
 

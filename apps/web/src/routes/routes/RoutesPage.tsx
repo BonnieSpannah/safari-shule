@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -14,12 +14,14 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { FormModal } from '@/components/ui/form-modal';
 import { FormField } from '@/components/ui/form-field';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 
 import { usePermission } from '@/hooks/usePermission';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useClientEvents } from '@/hooks/useClientEvents';
 import { useTenantFilter, TenantBadge, TenantFilterSelect } from '@/hooks/useTenantFilter';
 import { listRoutes, createRoute, updateRoute, type Route } from '@/lib/api/routes';
 
@@ -46,9 +48,14 @@ const schema = z.object({
 type Form = z.infer<typeof schema>;
 
 export function RoutesPage() {
+  const { emit } = useClientEvents();
   const canManage = usePermission('routes.manage');
   const { isSuperAdmin, tenants } = useTenantFilter();
   const qc = useQueryClient();
+
+  useEffect(() => {
+    emit('view', { entityType: 'route_list' });
+  }, [emit]);
   const [search, setSearch] = useState(''); const [activeFilter, setActiveFilter] = useState(''); const [tenantFilter, setTenantFilter] = useState(''); const [page, setPage] = useState(1);
   const [dialogOpen, setDialogOpen] = useState(false); const [editing, setEditing] = useState<Route | null>(null); const [toggleTarget, setToggleTarget] = useState<Route | null>(null);
   const dSearch = useDebounce(search, 300);
@@ -86,6 +93,15 @@ export function RoutesPage() {
       <PageHeader title="Routes" description="School bus routes, bus stops and student assignments." actions={canManage ? <Button onClick={openCreate} size="sm" className="gap-1.5 bg-green-600 hover:bg-green-700"><Plus className="h-4 w-4" />Add route</Button> : undefined} />
       <MapPlaceholder />
 
+      {query.error && (
+        <ErrorState
+          title="Failed to load routes"
+          error={query.error}
+          onRetry={() => query.refetch()}
+        />
+      )}
+
+      {!query.error && (
       <DataTable
         title="All routes"
         description={total > 0 ? `${total} route${total !== 1 ? 's' : ''}` : undefined}
@@ -101,6 +117,7 @@ export function RoutesPage() {
         columns={columns} rows={routes} rowKey={(r) => r.id} loading={query.isLoading} skeletonRows={PAGE_SIZE}
         empty={<EmptyState icon={<RouteIcon className="h-6 w-6" />} title="No routes found" description={canManage ? 'Create the first route above.' : undefined} />}
       />
+      )}
 
       <FormModal open={dialogOpen} onClose={() => setDialogOpen(false)} title={editing ? `Edit route — ${editing.name}` : 'Add route'} subtitle="Route name and description. Bus stops and geo-coordinates are managed via the map editor." size="md" onSubmit={form.handleSubmit((v) => saveMutation.mutate(v))} submitLabel={editing ? 'Save changes' : 'Create route'} submitting={saveMutation.isPending}>
         <div className="space-y-4">

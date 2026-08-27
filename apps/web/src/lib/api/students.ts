@@ -30,7 +30,7 @@ export async function getStudent(id: string): Promise<Student> {
   return data;
 }
 
-export async function createStudent(input: StudentInput): Promise<Student> {
+export async function createStudent(input: StudentInput & { targetTenantId?: string }): Promise<Student> {
   const { data } = await api.post<Student>('/v1/students', input);
   return data;
 }

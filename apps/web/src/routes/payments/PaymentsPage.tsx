@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Button } from '@/components/ui/button';
@@ -242,6 +243,15 @@ export function PaymentsPage() {
         }
       />
 
+      {paymentsQuery.error && (
+        <ErrorState
+          title="Failed to load payments"
+          error={paymentsQuery.error}
+          onRetry={() => paymentsQuery.refetch()}
+        />
+      )}
+
+      {!paymentsQuery.error && (
       <DataTable
         title="Transaction history"
         description={total > 0 ? `${total} transaction${total !== 1 ? 's' : ''}` : undefined}
@@ -314,6 +324,7 @@ export function PaymentsPage() {
           />
         }
       />
+      )}
 
       <FormModal
         open={initiateOpen}

@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FormActions } from '@/components/ui/form-actions';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
 
 import { usePermission, useAnyPermission } from '@/hooks/usePermission';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -27,6 +28,7 @@ import { useTenantFilter, TenantBadge, TenantFilterSelect } from '@/hooks/useTen
 import { humanizeRole } from '@/lib/roles';
 import { listUsers, inviteUser, deactivateUser, activateUser, type User } from '@/lib/api/users';
 import { listStaff, createStaffMember, updateStaffMember, deleteStaffMember, type StaffMember } from '@/lib/api/staff';
+import type { StaffInput } from '@safari-shule/shared-types';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const PAGE_SIZE = 10;
@@ -197,6 +199,15 @@ function UsersTab() {
         </div>
       )}
 
+      {query.error && (
+        <ErrorState
+          title="Failed to load users"
+          error={query.error}
+          onRetry={() => query.refetch()}
+        />
+      )}
+
+      {!query.error && (
       <DataTable
         title="System users"
         description={total > 0 ? `${total} user${total !== 1 ? 's' : ''}` : undefined}
@@ -215,6 +226,7 @@ function UsersTab() {
         skeletonRows={PAGE_SIZE}
         empty={<EmptyState icon={<UserPlus className="h-6 w-6" />} title="No users found" description={canManage ? 'Invite the first user above.' : undefined} />}
       />
+      )}
 
       {/* Invite dialog */}
       <Dialog open={inviteOpen} onOpenChange={(o) => { if (!o) { setInviteOpen(false); form.reset(); } }}>
@@ -332,8 +344,9 @@ function StaffTab() {
 
   const saveMutation = useMutation({
     mutationFn: (v: StaffForm) => {
-      const input = { ...v, phone: v.phoneE164, email: v.email || null };
-      return editing ? updateStaffMember(editing.id, input as any) : createStaffMember(input as any);
+      const { phoneE164, email, ...rest } = v;
+      const input: StaffInput = { ...rest, phone: phoneE164, email: email || null, flexibleAttributes: {} };
+      return editing ? updateStaffMember(editing.id, input) : createStaffMember(input);
     },
     onSuccess: () => {
       toast.success(editing ? 'Staff member updated.' : 'Staff member added.');
@@ -405,6 +418,15 @@ function StaffTab() {
         </div>
       )}
 
+      {query.error && (
+        <ErrorState
+          title="Failed to load staff"
+          error={query.error}
+          onRetry={() => query.refetch()}
+        />
+      )}
+
+      {!query.error && (
       <DataTable
         title="Staff members"
         description={total > 0 ? `${total} staff member${total !== 1 ? 's' : ''}` : undefined}
@@ -425,6 +447,7 @@ function StaffTab() {
         skeletonRows={PAGE_SIZE}
         empty={<EmptyState icon={<UserPlus className="h-6 w-6" />} title="No staff members found" description={canManage ? 'Add the first staff member above.' : undefined} />}
       />
+      )}
 
       {/* Create/Edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) setDialogOpen(false); }}>
@@ -447,8 +470,8 @@ function StaffTab() {
               ] as const).map(([field, label, type, placeholder, required]) => (
                 <div key={field} className="space-y-1.5">
                   <Label>{label}{required && <span className="text-danger ml-0.5">*</span>}</Label>
-                  <Input type={type} placeholder={placeholder} invalid={!!(form.formState.errors as any)[field]} {...form.register(field)} />
-                  {(form.formState.errors as any)[field] && <p className="text-xs text-danger">{(form.formState.errors as any)[field]?.message}</p>}
+                  <Input type={type} placeholder={placeholder} invalid={!!form.formState.errors[field as keyof StaffForm]} {...form.register(field)} />
+                  {form.formState.errors[field as keyof StaffForm] && <p className="text-xs text-danger">{form.formState.errors[field as keyof StaffForm]?.message}</p>}
                 </div>
               ))}
               <div className="space-y-1.5">
