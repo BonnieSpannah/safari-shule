@@ -290,6 +290,7 @@ model User {
   auditLogs       AuditLog[]           @relation("AuditActor")
   invitationsSent Invitation[]         @relation("InvitationInviter")
   passwordHistory PasswordHistory[]
+  staffProfile    Staff?               @relation("StaffUser")
   resetTokens     PasswordResetToken[]
 
   @@unique([tenantId, email])
@@ -484,6 +485,7 @@ model Staff {
   updatedAt          DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation("StaffUser", fields: [userId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, employeeNumber])
   @@index([tenantId, legalName])

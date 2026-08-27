@@ -45,7 +45,9 @@ export class TripsController {
   @Post()
   @RequirePermission('trips.dispatch')
   @Audited({ action: 'trip.create', entityType: 'trip' })
-  create(@ZodBody(tripInput) body: z.infer<typeof tripInput>) {
+  create(
+    @ZodBody(tripInput.extend({ targetTenantId: z.string().uuid().optional() })) body: z.infer<typeof tripInput> & { targetTenantId?: string },
+  ) {
     return this.svc.create(body);
   }
 

@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { CommsModule } from '../comms/comms.module';
+import { RbacModule } from '../rbac/rbac.module';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { UsersController } from './users.controller';
@@ -21,6 +22,7 @@ import { JwtAuthGuard } from './jwt-auth.guard';
       }),
     }),
     CommsModule,
+    RbacModule,
   ],
   providers: [AuthService, JwtStrategy, JwtAuthGuard],
   controllers: [AuthController, UsersController],

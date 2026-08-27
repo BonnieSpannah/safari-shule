@@ -25,11 +25,19 @@ export class OnboardingService {
     if (!inviterId) throw new BadRequestException('Authenticated user required to send invitations.');
 
     const roleRows = await this.prisma.role.findMany({
-      where: { key: { in: input.roleKeys } },
+      where: { tenantId, key: { in: input.roleKeys } },
     });
     if (roleRows.length !== input.roleKeys.length) {
       throw new BadRequestException('One or more role keys are invalid for this tenant.');
     }
+
+    const existing = await this.prisma.user.findFirst({ where: { tenantId, email: input.email.toLowerCase() } });
+    if (existing) throw new BadRequestException('A user with this email already exists in this tenant.');
+
+    const pending = await this.prisma.invitation.findFirst({
+      where: { tenantId, email: input.email.toLowerCase(), acceptedAt: null, expiresAt: { gt: new Date() } },
+    });
+    if (pending) throw new BadRequestException('An active invitation for this email already exists.');
 
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
@@ -104,6 +112,11 @@ export class OnboardingService {
           data: roles.map((r) => ({ tenantId: invitation.tenantId, userId: user.id, roleId: r.id })),
         });
       }
+      // Link any unlinked staff record with the same email in this tenant
+      await this.prisma.staff.updateMany({
+        where: { tenantId: invitation.tenantId, email: invitation.email, userId: null },
+        data: { userId: user.id },
+      });
       await this.prisma.invitation.update({
         where: { id: invitation.id },
         data: { acceptedAt: new Date() },

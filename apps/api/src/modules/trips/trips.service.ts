@@ -8,7 +8,7 @@ import type { TripInput, PaginationQuery } from '@safari-shule/shared-types';
 export class TripsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(q: PaginationQuery & { status?: string; scopeTenantId?: string | null }) {
+  async list(q: PaginationQuery & { status?: string; sortAsc?: string; scopeTenantId?: string | null }) {
     const tenantId = q.scopeTenantId !== undefined ? q.scopeTenantId : requireTenantId();
     const where: any = tenantId ? { tenantId } : {};
     if (q.status) where.status = q.status as any;
@@ -17,6 +17,7 @@ export class TripsService {
       this.prisma.trip.findMany({
         where,
         ...buildPagination(q),
+        orderBy: { scheduledStart: q.sortAsc === 'true' ? 'asc' : 'desc' },
         include: {
           route: true,
           vehicle: true,
@@ -41,8 +42,8 @@ export class TripsService {
     return row;
   }
 
-  create(input: TripInput) {
-    const tenantId = requireTenantId();
+  create(input: TripInput & { targetTenantId?: string }) {
+    const tenantId = input.targetTenantId ?? requireTenantId();
     return this.prisma.trip.create({
       data: {
         tenantId,

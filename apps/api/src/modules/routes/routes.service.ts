@@ -23,7 +23,7 @@ export class RoutesService {
     if (q.isActive !== undefined) where.isActive = q.isActive === 'true';
     const [total, data] = await Promise.all([
       this.prisma.route.count({ where }),
-      this.prisma.route.findMany({ where, ...buildPagination(q), orderBy: { name: 'asc' }, include: { tenant: { select: { id: true, name: true, slug: true } } } }),
+      this.prisma.route.findMany({ where, ...buildPagination(q), orderBy: { name: 'asc' }, include: { tenant: { select: { id: true, name: true, slug: true } }, _count: { select: { busStops: true, studentAssignments: true } } } }),
     ]);
     return paginated(data, total, q);
   }
@@ -41,9 +41,11 @@ export class RoutesService {
     const tenantId = input.targetTenantId ?? requireTenantId();
     const routeId = randomUUID();
     await this.prisma.$transaction(async (tx: Parameters<Parameters<PrismaClient['$transaction']>[0]>[0]) => {
+      // Bind the correct tenant so the RLS WITH CHECK passes for all INSERTs in this transaction
+      await tx.$executeRawUnsafe(`SET LOCAL app.tenant_id = '${tenantId.replace(/'/g, "''")}'`);
       await tx.$executeRaw`
         INSERT INTO routes
-          (id, tenant_id, name, description, is_active, start_point, end_point, created_at, updated_at)
+          (id, "tenantId", name, description, "isActive", "startPoint", "endPoint", "createdAt", "updatedAt")
         VALUES (
           ${routeId}::uuid,
           ${tenantId}::uuid,
@@ -60,7 +62,7 @@ export class RoutesService {
         const stopId = randomUUID();
         await tx.$executeRaw`
           INSERT INTO bus_stops
-            (id, tenant_id, route_id, name, pickup_order, scheduled_pickup_time, scheduled_dropoff_time, location)
+            (id, "tenantId", "routeId", name, "pickupOrder", "scheduledPickupTime", "scheduledDropoffTime", location)
           VALUES (
             ${stopId}::uuid,
             ${tenantId}::uuid,
@@ -77,6 +79,40 @@ export class RoutesService {
     return { id: routeId };
   }
 
+  async getRouteStops(routeId: string) {
+    return this.prisma.$queryRaw<{ id: string; name: string; lat: number; lng: number; pickupOrder: number; scheduledPickupTime: string; scheduledDropoffTime: string }[]>`
+      SELECT id, name,
+        ST_Y(location::geometry)::float8 AS lat,
+        ST_X(location::geometry)::float8 AS lng,
+        "pickupOrder", "scheduledPickupTime", "scheduledDropoffTime"
+      FROM bus_stops
+      WHERE "routeId" = ${routeId}::uuid
+      ORDER BY "pickupOrder" ASC
+    `;
+  }
+
+  async replaceRouteStops(routeId: string, stops: { name: string; lat: number; lng: number; pickupOrder: number; scheduledPickupTime: string; scheduledDropoffTime: string }[]) {
+    const route = await this.prisma.route.findFirst({ where: { id: routeId } });
+    if (!route) throw new NotFoundException();
+    const tenantId = route.tenantId;
+    await this.prisma.$transaction(async (tx: Parameters<Parameters<PrismaClient['$transaction']>[0]>[0]) => {
+      await tx.$executeRawUnsafe(`SET LOCAL app.tenant_id = '${tenantId.replace(/'/g, "''")}'`);
+      await tx.$executeRaw`DELETE FROM bus_stops WHERE "routeId" = ${routeId}::uuid`;
+      for (const stop of stops) {
+        const stopId = randomUUID();
+        await tx.$executeRaw`
+          INSERT INTO bus_stops (id, "tenantId", "routeId", name, "pickupOrder", "scheduledPickupTime", "scheduledDropoffTime", location)
+          VALUES (
+            ${stopId}::uuid, ${tenantId}::uuid, ${routeId}::uuid,
+            ${stop.name}, ${stop.pickupOrder}, ${stop.scheduledPickupTime}, ${stop.scheduledDropoffTime},
+            ST_SetSRID(ST_MakePoint(${stop.lng}, ${stop.lat}), 4326)::geography
+          )
+        `;
+      }
+    });
+    return { routeId, count: stops.length };
+  }
+
   async createGeofence(input: GeofenceInput) {
     const tenantId = requireTenantId();
     if (input.polygon.length < 3) throw new BadRequestException('Polygon must have at least 3 points.');
@@ -84,7 +120,7 @@ export class RoutesService {
     const wkt = polygonToWkt(input.polygon);
     await this.prisma.$executeRaw`
       INSERT INTO geofences
-        (id, tenant_id, name, kind, route_id, vehicle_id, polygon, created_at)
+        (id, "tenantId", name, kind, "routeId", "vehicleId", polygon, "createdAt")
       VALUES (
         ${id}::uuid,
         ${tenantId}::uuid,

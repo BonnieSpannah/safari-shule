@@ -18,7 +18,7 @@ export class StaffService {
     ];
     const [total, data] = await Promise.all([
       this.prisma.staff.count({ where }),
-      this.prisma.staff.findMany({ where, ...buildPagination(q), include: { tenant: { select: { id: true, name: true, slug: true } } } }),
+      this.prisma.staff.findMany({ where, ...buildPagination(q), include: { tenant: { select: { id: true, name: true, slug: true } }, user: { select: { id: true, email: true } } } }),
     ]);
     return paginated(data, total, q);
   }
@@ -49,24 +49,26 @@ export class StaffService {
     });
   }
 
-  async update(id: string, patch: Partial<StaffInput>) {
-    const tenantId = requireTenantId();
-    const existing = await this.prisma.staff.findFirst({ where: { id, tenantId } });
+  async update(id: string, patch: Partial<StaffInput> & { targetTenantId?: string; sourceTenantId?: string }) {
+    const lookupTenantId = patch.sourceTenantId ?? requireTenantId();
+    const { targetTenantId, sourceTenantId: _s, ...fields } = patch;
+    const existing = await this.prisma.staff.findFirst({ where: { id, tenantId: lookupTenantId } });
     if (!existing) throw new NotFoundException();
-    const flex = patch.flexibleAttributes
-      ? await this.validator.validateAndNormalize(tenantId, 'staff', patch.flexibleAttributes)
+    const flex = fields.flexibleAttributes
+      ? await this.validator.validateAndNormalize(lookupTenantId, 'staff', fields.flexibleAttributes)
       : undefined;
     return this.prisma.staff.update({
       where: { id },
       data: {
-        ...(patch.employeeNumber ? { employeeNumber: patch.employeeNumber } : {}),
-        ...(patch.legalName ? { legalName: patch.legalName } : {}),
-        ...(patch.nationalId ? { nationalId: patch.nationalId } : {}),
-        ...(patch.phone ? { phoneE164: patch.phone } : {}),
-        ...(patch.email !== undefined ? { email: patch.email } : {}),
-        ...(patch.position ? { position: patch.position } : {}),
-        ...(patch.dateOfBirth ? { dateOfBirth: new Date(patch.dateOfBirth) } : {}),
-        ...(patch.gender ? { gender: patch.gender as any } : {}),
+        ...(targetTenantId && targetTenantId !== existing.tenantId ? { tenantId: targetTenantId } : {}),
+        ...(fields.employeeNumber ? { employeeNumber: fields.employeeNumber } : {}),
+        ...(fields.legalName ? { legalName: fields.legalName } : {}),
+        ...(fields.nationalId ? { nationalId: fields.nationalId } : {}),
+        ...(fields.phone ? { phoneE164: fields.phone } : {}),
+        ...(fields.email !== undefined ? { email: fields.email } : {}),
+        ...(fields.position ? { position: fields.position } : {}),
+        ...(fields.dateOfBirth ? { dateOfBirth: new Date(fields.dateOfBirth) } : {}),
+        ...(fields.gender ? { gender: fields.gender as any } : {}),
         ...(flex ? { flexibleAttributes: flex as any } : {}),
       },
     });

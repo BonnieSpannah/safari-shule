@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Patch, Post, Req, Body } from '@nestjs/common';
+import { Controller, Get, Param, Patch, Post, Put, Req, Body } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import type { Request } from 'express';
@@ -41,15 +41,42 @@ export class RoutesController {
   @Post('routes')
   @RequirePermission('routes.manage')
   @Audited({ action: 'route.create', entityType: 'route' })
-  create(@ZodBody(routeInput) body: z.infer<typeof routeInput>) {
+  create(
+    @ZodBody(routeInput.extend({ targetTenantId: z.string().uuid().optional() })) body: z.infer<typeof routeInput> & { targetTenantId?: string },
+  ) {
     return this.svc.createRoute(body);
   }
 
   @Patch('routes/:id')
   @RequirePermission('routes.manage')
   @Audited({ action: 'route.update', entityType: 'route', entityIdParam: 'id' })
-  patch(@Param('id') id: string, @Body() body: { name?: string; description?: string | null; isActive?: boolean; targetTenantId?: string }) {
-    return this.svc.patchRoute(id, body);
+  async patch(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() body: { name?: string; description?: string | null; isActive?: boolean; targetTenantId?: string },
+  ) {
+    const scope = await resolveTenantScope(this.rbac, req, body.targetTenantId);
+    const run = () => this.svc.patchRoute(id, body);
+    return scope.isSuperAdmin ? runWithBypass(run) : run();
+  }
+
+  @Get('routes/:id/stops')
+  @RequirePermission('routes.view')
+  stops(@Param('id') id: string) {
+    return this.svc.getRouteStops(id);
+  }
+
+  @Get('routes/:id/assignments')
+  @RequirePermission('routes.view')
+  assignments(@Param('id') id: string) {
+    return this.svc.listAssignmentsForRoute(id);
+  }
+
+  @Put('routes/:id/stops')
+  @RequirePermission('routes.manage')
+  @Audited({ action: 'route.stops_updated', entityType: 'route', entityIdParam: 'id' })
+  replaceStops(@Param('id') id: string, @Body() body: { stops: { name: string; lat: number; lng: number; pickupOrder: number; scheduledPickupTime: string; scheduledDropoffTime: string }[] }) {
+    return this.svc.replaceRouteStops(id, body.stops ?? []);
   }
 
   @Post('geofences')
@@ -64,11 +91,5 @@ export class RoutesController {
   @Audited({ action: 'route.assign', entityType: 'student_route_assignment' })
   assign(@ZodBody(studentRouteAssignmentInput) body: z.infer<typeof studentRouteAssignmentInput>) {
     return this.svc.assignStudentToRoute(body);
-  }
-
-  @Get('routes/:id/assignments')
-  @RequirePermission('routes.view')
-  assignments(@Param('id') id: string) {
-    return this.svc.listAssignmentsForRoute(id);
   }
 }
