@@ -1,8 +1,56 @@
+# =========================================================================
+# CODEOWNERS — branch protection ruleset for Safari Shule
+#
+# Ownership model:
+# - Default: @BonnieSpannah (full-stack lead)
+# - Tier P0 (security-critical, 2-approver): auth, payments, hardware, DB schema, infra
+# - Tier P1 (stable-API, 1-approver): web, shared-types, workflows, docs
+# =========================================================================
+
 # Default owner for all files
 * @BonnieSpannah
 
-# Sensitive backend domains requiring extra review
+# ───────────────────────────────────────────────────────────────────────
+# Tier P0 — Security-critical, multi-tenant isolation, data integrity
+# Require 2+ code-owner approvals (enforced by branch protection).
+# ───────────────────────────────────────────────────────────────────────
+
+# Auth: JWT, password hashing, tenant pinning, permission checks
 apps/api/src/auth/ @BonnieSpannah
+
+# Payments: M-Pesa integration, transaction posting, reconciliation
 apps/api/src/modules/payments/ @BonnieSpannah
+
+# Hardware: RFID HMAC scheme, replay prevention, device registration
 apps/api/src/modules/hardware/ @BonnieSpannah
+
+# Database schema: tenant scoping, RLS policies, migrations, seed data
 apps/api/prisma/ @BonnieSpannah
+
+# Infrastructure as Code: docker, nginx, compose, env vars
+infra/ @BonnieSpannah
+
+# GitHub Actions & release pipeline
+.github/workflows/ @BonnieSpannah
+
+# Branch protection, merge strategy enforcement
+.github/protect-branches.sh @BonnieSpannah
+bin/protect-branches.sh @BonnieSpannah
+
+# ───────────────────────────────────────────────────────────────────────
+# Tier P1 — Stable APIs, one approver sufficient
+# ───────────────────────────────────────────────────────────────────────
+
+# Web (Vite + React)
+apps/web/src/ @BonnieSpannah
+
+# Shared types (Zod schemas, DTO validation)
+packages/shared-types/src/ @BonnieSpannah
+
+# Documentation
+docs/ @BonnieSpannah
+README.md @BonnieSpannah
+
+# Contributing guide & commit conventions
+CONTRIBUTING.md @BonnieSpannah
+commitlint.config.cjs @BonnieSpannah
