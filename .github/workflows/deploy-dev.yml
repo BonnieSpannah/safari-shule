@@ -1,0 +1,69 @@
+name: Deploy Dev
+
+on:
+  workflow_run:
+    workflows: ['Build & Publish Image']
+    types: [completed]
+
+permissions:
+  contents: read
+  deployments: write
+
+env:
+  REGISTRY: ghcr.io
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to Dev
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: dev
+
+    steps:
+      - name: Resolve immutable image tags
+        id: image
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "api_image=${{ env.REGISTRY }}/${{ github.repository_owner }}/safari-shule-api:sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "web_image=${{ env.REGISTRY }}/${{ github.repository_owner }}/safari-shule-web:sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+        env:
+          GITHUB_SHA: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Trigger dev deployment
+        env:
+          DEPLOY_WEBHOOK_URL: ${{ secrets.DEV_DEPLOY_WEBHOOK_URL }}
+          DEPLOY_WEBHOOK_TOKEN: ${{ secrets.DEV_DEPLOY_WEBHOOK_TOKEN }}
+        run: |
+          if [ -z "$DEPLOY_WEBHOOK_URL" ]; then
+            echo "::error::Missing required secret DEV_DEPLOY_WEBHOOK_URL"
+            exit 1
+          fi
+
+          AUTH_HEADER=""
+          if [ -n "$DEPLOY_WEBHOOK_TOKEN" ]; then
+            AUTH_HEADER="Authorization: Bearer $DEPLOY_WEBHOOK_TOKEN"
+          fi
+
+          curl --fail --show-error --silent --location \
+            --request POST \
+            --header "Content-Type: application/json" \
+            ${AUTH_HEADER:+--header "$AUTH_HEADER"} \
+            --data @- \
+            "$DEPLOY_WEBHOOK_URL" <<EOF
+          {
+            "environment": "dev",
+            "commitSha": "${{ github.event.workflow_run.head_sha }}",
+            "sourceWorkflowRunId": "${{ github.event.workflow_run.id }}",
+            "images": {
+              "api": "${{ steps.image.outputs.api_image }}",
+              "web": "${{ steps.image.outputs.web_image }}"
+            }
+          }
+          EOF

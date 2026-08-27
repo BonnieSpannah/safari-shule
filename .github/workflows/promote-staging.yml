@@ -1,0 +1,86 @@
+name: Promote to Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_branch:
+        description: Source branch to fast-forward from
+        required: false
+        default: main
+        type: string
+
+permissions:
+  contents: write
+  deployments: write
+
+env:
+  REGISTRY: ghcr.io
+
+concurrency:
+  group: promote-staging
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Fast-Forward and Deploy Staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fast-forward staging branch
+        id: ff
+        run: |
+          SOURCE="${{ github.event.inputs.source_branch || 'main' }}"
+          git fetch origin "$SOURCE" staging || true
+
+          if git ls-remote --exit-code --heads origin staging > /dev/null; then
+            git checkout -B staging origin/staging
+          else
+            git checkout -b staging "origin/$SOURCE"
+          fi
+
+          git merge --ff-only "origin/$SOURCE"
+          git push origin staging
+
+          HEAD_SHA=$(git rev-parse HEAD)
+          SHORT_SHA="${HEAD_SHA::7}"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger staging deployment
+        env:
+          STAGING_DEPLOY_WEBHOOK_URL: ${{ secrets.STAGING_DEPLOY_WEBHOOK_URL }}
+          STAGING_DEPLOY_WEBHOOK_TOKEN: ${{ secrets.STAGING_DEPLOY_WEBHOOK_TOKEN }}
+        run: |
+          if [ -z "$STAGING_DEPLOY_WEBHOOK_URL" ]; then
+            echo "::error::Missing required secret STAGING_DEPLOY_WEBHOOK_URL"
+            exit 1
+          fi
+
+          AUTH_HEADER=""
+          if [ -n "$STAGING_DEPLOY_WEBHOOK_TOKEN" ]; then
+            AUTH_HEADER="Authorization: Bearer $STAGING_DEPLOY_WEBHOOK_TOKEN"
+          fi
+
+          curl --fail --show-error --silent --location \
+            --request POST \
+            --header "Content-Type: application/json" \
+            ${AUTH_HEADER:+--header "$AUTH_HEADER"} \
+            --data @- \
+            "$STAGING_DEPLOY_WEBHOOK_URL" <<EOF
+          {
+            "environment": "staging",
+            "commitSha": "${{ steps.ff.outputs.head_sha }}",
+            "images": {
+              "api": "${{ env.REGISTRY }}/${{ github.repository_owner }}/safari-shule-api:sha-${{ steps.ff.outputs.short_sha }}",
+              "web": "${{ env.REGISTRY }}/${{ github.repository_owner }}/safari-shule-web:sha-${{ steps.ff.outputs.short_sha }}"
+            }
+          }
+          EOF
