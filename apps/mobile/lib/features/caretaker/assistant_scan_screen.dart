@@ -11,14 +11,23 @@ import 'package:mobile/features/caretaker/qr_scan_fallback.dart';
 import 'package:uuid/uuid.dart';
 
 class AssistantScanScreen extends ConsumerStatefulWidget {
-  const AssistantScanScreen({super.key});
+  const AssistantScanScreen({
+    super.key,
+    this.scanNfcTag,
+    this.scanQrTag,
+    this.submitTag,
+  });
+
+  final Future<String?> Function()? scanNfcTag;
+  final Future<String?> Function(BuildContext context)? scanQrTag;
+  final Future<String> Function(WidgetRef ref, String tagUid)? submitTag;
 
   @override
   ConsumerState<AssistantScanScreen> createState() => _AssistantScanScreenState();
 }
 
 class _AssistantScanScreenState extends ConsumerState<AssistantScanScreen> {
-  Future<void> _postBoarding(
+  Future<String> _postBoarding(
     WidgetRef ref, {
     required String tagUid,
   }) async {
@@ -26,16 +35,9 @@ class _AssistantScanScreenState extends ConsumerState<AssistantScanScreen> {
         ApiConfig.deviceApiKey.isEmpty ||
         ApiConfig.deviceHmacSecret.isEmpty) {
       if (!mounted) {
-        return;
+        return 'Missing DEVICE_ID / DEVICE_API_KEY / DEVICE_HMAC_SECRET.';
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Missing DEVICE_ID / DEVICE_API_KEY / DEVICE_HMAC_SECRET.',
-          ),
-        ),
-      );
-      return;
+      return 'Missing DEVICE_ID / DEVICE_API_KEY / DEVICE_HMAC_SECRET.';
     }
 
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -67,12 +69,10 @@ class _AssistantScanScreenState extends ConsumerState<AssistantScanScreen> {
             }),
           );
       if (!mounted) {
-        return;
+        return 'Boarding recorded for Student';
       }
       final studentName = (response.data?['studentName'] as String?) ?? 'Student';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Boarding recorded for $studentName')),
-      );
+      return 'Boarding recorded for $studentName';
     } on DioException {
       await OutboxStore.put(
         OutboxEntry(
@@ -84,21 +84,37 @@ class _AssistantScanScreenState extends ConsumerState<AssistantScanScreen> {
         ),
       );
       if (!mounted) {
-        return;
+        return 'Offline: scan queued for retry';
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Offline: scan queued for retry')),
-      );
+      return 'Offline: scan queued for retry';
     }
   }
 
-  Future<void> _scanNfc(WidgetRef ref) async {
-    final tag = await FlutterNfcKit.poll();
+  Future<void> _submitTag(WidgetRef ref, String tagUid) async {
+    final message = widget.submitTag != null
+        ? await widget.submitTag!(ref, tagUid)
+        : await _postBoarding(ref, tagUid: tagUid);
     if (!mounted) {
       return;
     }
-    await _postBoarding(ref, tagUid: tag.id);
-    await FlutterNfcKit.finish();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> _scanNfc(WidgetRef ref) async {
+    final tagUid = widget.scanNfcTag != null
+        ? await widget.scanNfcTag!()
+        : (await FlutterNfcKit.poll()).id;
+    if (!mounted) {
+      return;
+    }
+    if (tagUid != null && tagUid.isNotEmpty) {
+      await _submitTag(ref, tagUid);
+    }
+    if (widget.scanNfcTag == null) {
+      await FlutterNfcKit.finish();
+    }
   }
 
   @override
@@ -116,14 +132,16 @@ class _AssistantScanScreenState extends ConsumerState<AssistantScanScreen> {
           ElevatedButton(
             key: const Key('scan-qr-button'),
             onPressed: () async {
-              final tag = await Navigator.of(context).push<String>(
-                MaterialPageRoute(builder: (_) => const QrScanFallbackScreen()),
-              );
+              final tag = widget.scanQrTag != null
+                  ? await widget.scanQrTag!(context)
+                  : await Navigator.of(context).push<String>(
+                      MaterialPageRoute(builder: (_) => const QrScanFallbackScreen()),
+                    );
               if (!mounted) {
                 return;
               }
               if (tag != null) {
-                await _postBoarding(ref, tagUid: tag);
+                await _submitTag(ref, tag);
               }
             },
             child: const Text('Scan QR fallback'),
