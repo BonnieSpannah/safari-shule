@@ -29,7 +29,7 @@ Kenyan multi-tenant school transport SaaS. Five modules:
 | M3 — Stabilize + e2e green                                           | ✅ done        | DataTable v3 + export; e2e suite passing                                               |
 | M4 — Web admin MVP                                                   | ✅ done        | All admin pages wired; Prometheus metrics, DNC, Bull Board, audit event sink committed |
 | M5 — CI/CD hardening                                                 | ✅ done        | Husky gates + deploy/promotion/rollback workflows + branch protection script added     |
-| M6 — QuickStart docs                                                 | ✅ done        | install-mac.md, first-run.md, e2e-walkthrough.md, user-guide/admin.md                  |
+| M6 — QuickStart docs                                                 | ❌ not started |                                                                                        |
 | M7 — Flutter mobile                                                  | ❌ not started |                                                                                        |
 
 ## What's done — apps/api
