@@ -1,0 +1,101 @@
+name: DB Migration Check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/api/prisma/migrations/**"
+      - "apps/api/prisma/schema.prisma"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  migration-check:
+    name: Prisma Migration Safety Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: safari
+          POSTGRES_PASSWORD: safari
+          POSTGRES_DB: safari_shule_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://safari:safari@localhost:5432/safari_shule_test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate migration history is not modified
+        # Detects rewrites of already-applied migration files (history tampering).
+        run: |
+          git fetch origin main --depth=1
+          CHANGED=$(git diff --name-only origin/main HEAD -- apps/api/prisma/migrations/ \
+            | grep -v '/migration_lock.toml$' \
+            | grep -E '[0-9]{14}_.*\.sql$' \
+            | while read f; do
+                git show origin/main:"$f" > /dev/null 2>&1 && echo "$f"
+              done)
+          if [ -n "$CHANGED" ]; then
+            echo "::error::Applied migration files were modified — this rewrites history:"
+            echo "$CHANGED"
+            exit 1
+          fi
+
+      - name: Check for data-destructive statements
+        # Warn on DROP TABLE / DROP COLUMN / TRUNCATE in new migration files.
+        run: |
+          git fetch origin main --depth=1
+          NEW_MIGRATIONS=$(git diff --name-only --diff-filter=A origin/main HEAD \
+            -- 'apps/api/prisma/migrations/*.sql')
+          if [ -z "$NEW_MIGRATIONS" ]; then
+            echo "No new migration files — skipping destructive statement check."
+            exit 0
+          fi
+          DESTRUCTIVE=$(grep -rniE '(DROP\s+TABLE|DROP\s+COLUMN|TRUNCATE)' $NEW_MIGRATIONS || true)
+          if [ -n "$DESTRUCTIVE" ]; then
+            echo "::warning::Destructive SQL detected in new migrations — manual review required:"
+            echo "$DESTRUCTIVE"
+          fi
+
+      - name: Apply migrations against fresh database
+        run: pnpm --filter @safari-shule/api exec prisma migrate deploy
+
+      - name: Validate schema matches migration state
+        # Fails if schema.prisma has unapplied changes (i.e. missing migration).
+        run: |
+          pnpm --filter @safari-shule/api exec prisma migrate diff \
+            --from-migrations apps/api/prisma/migrations \
+            --to-schema-datamodel apps/api/prisma/schema.prisma \
+            --shadow-database-url "$DATABASE_URL" \
+            --exit-code || {
+              echo "::error::schema.prisma has changes not captured in a migration. Run 'make db-migrate-new' locally."
+              exit 1
+            }

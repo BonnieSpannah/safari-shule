@@ -1,0 +1,5 @@
+{
+  "apps/api": "0.1.0",
+  "apps/web": "0.1.0",
+  "packages/shared-types": "0.1.0"
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "node",
+  "packages": {
+    "apps/api": {
+      "release-type": "node",
+      "package-name": "@safari-shule/api",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "apps/web": {
+      "release-type": "node",
+      "package-name": "@safari-shule/web",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/shared-types": {
+      "release-type": "node",
+      "package-name": "@safari-shule/shared-types",
+      "changelog-path": "CHANGELOG.md"
+    }
+  },
+  "include-component-in-tag": true,
+  "pull-request-title-pattern": "chore: release ${component} ${version}"
+}

@@ -1,0 +1,45 @@
+name: Project Automation
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, converted_to_draft]
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  label-pr:
+    name: Auto-label PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Label by changed paths
+        uses: actions/labeler@v5
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          configuration-path: .github/labeler.yml
+
+  draft-notice:
+    name: Comment on draft PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.action == 'converted_to_draft'
+
+    steps:
+      - name: Post draft notice
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: "🔒 This PR is now a draft — CI will still run but it will not be auto-merged."
+            });

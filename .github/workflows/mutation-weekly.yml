@@ -1,0 +1,52 @@
+name: Mutation Testing
+
+on:
+  schedule:
+    # Every Monday at 04:00 UTC (off-peak, after CodeQL)
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    name: Stryker Mutation (API)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: |
+          DATABASE_URL=postgresql://build:build@localhost:5432/build \
+          DIRECT_URL=postgresql://build:build@localhost:5432/build \
+          pnpm --filter @safari-shule/api exec prisma generate
+
+      - name: Run Stryker
+        working-directory: apps/api
+        run: npx stryker run
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stryker-report
+          path: apps/api/reports/mutation/
+          retention-days: 30
