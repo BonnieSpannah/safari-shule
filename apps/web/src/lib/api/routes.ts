@@ -31,6 +31,30 @@ export interface CreateRouteInput {
   }[];
 }
 
+export interface BusStop {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  pickupOrder: number;
+  scheduledPickupTime: string;
+  scheduledDropoffTime: string;
+}
+
+export interface BusStopDraft extends Omit<BusStop, 'id'> {
+  draftId: string;
+}
+
+export async function getRouteStops(routeId: string): Promise<BusStop[]> {
+  const { data } = await api.get<BusStop[]>(`/v1/routes/${routeId}/stops`);
+  return data;
+}
+
+export async function replaceRouteStops(routeId: string, stops: Omit<BusStop, 'id'>[]): Promise<{ routeId: string; count: number }> {
+  const { data } = await api.put(`/v1/routes/${routeId}/stops`, { stops });
+  return data;
+}
+
 export async function listRoutes(params?: { q?: string; isActive?: string; tenantId?: string; page?: number; pageSize?: number }): Promise<ListRoutesResponse> {
   const { data } = await api.get<ListRoutesResponse>('/v1/routes', { params });
   return data;

@@ -71,6 +71,12 @@ const SECTIONS: readonly NavSection[] = [
         permissions: ['vehicles.view', 'vehicles.create'],
       },
       {
+        to: '/routes',
+        label: 'Routes',
+        icon: RouteIcon,
+        permissions: ['routes.view', 'routes.manage'],
+      },
+      {
         to: '/trips',
         label: 'Trips',
         icon: Radio,

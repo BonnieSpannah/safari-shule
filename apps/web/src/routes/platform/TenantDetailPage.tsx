@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { format, formatDistanceToNow, differenceInYears } from 'date-fns';
 import {
   ArrowLeft, Pencil, Users, Truck, GraduationCap, Route, UserCog,
-  X, ChevronRight, Loader2, Mail, Phone, Calendar, BadgeCheck,
+  X, ChevronRight, Loader2, Mail, Phone, BadgeCheck,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -106,7 +106,7 @@ export function TenantDetailPage() {
         actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => navigate(-1)} className="gap-1.5"><ArrowLeft className="h-4 w-4" /> Back</Button>
-            <Button onClick={openEdit} className="gap-1.5 bg-green-600 hover:bg-green-700"><Pencil className="h-4 w-4" /> Edit details</Button>
+            <Button onClick={openEdit} className="gap-1.5 bg-green-600 hover:bg-green-700"><Pencil className="h-4 w-4" /> Edit</Button>
           </div>
         }
       />

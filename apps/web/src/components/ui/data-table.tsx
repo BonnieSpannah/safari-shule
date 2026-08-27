@@ -213,7 +213,9 @@ async function exportPDF<T>(rows: T[], cols: Column<T>[], filename: string, meta
 
   // ── Watermark ──
   doc.saveGraphicsState();
-  (doc as any).setGState(new (doc as any).GState({ opacity: 0.05 }));
+  (doc as unknown as { setGState: (s: unknown) => void }).setGState(
+    new (doc as unknown as { GState: new (o: { opacity: number }) => unknown }).GState({ opacity: 0.05 }),
+  );
   doc.setFontSize(52);
   doc.setTextColor(15, 118, 110);
   doc.text(BRAND, pageW / 2, pageH / 2, { align: 'center', angle: 35 });
@@ -267,7 +269,7 @@ async function exportPDF<T>(rows: T[], cols: Column<T>[], filename: string, meta
     bodyStyles: { fontSize: 8, cellPadding: 2.5 },
     alternateRowStyles: { fillColor: [240, 253, 250] },
     tableLineColor: [200, 235, 230], tableLineWidth: 0.2,
-    didDrawPage: (data: any) => {
+    didDrawPage: (data: { pageNumber: number }) => {
       const pg = doc.getNumberOfPages();
       const cur = data.pageNumber;
       doc.setFontSize(7); doc.setTextColor(150, 150, 150); doc.setFont('helvetica', 'normal');
@@ -498,7 +500,7 @@ export function DataTable<T>({
               const isAct = isActions(col as Column<unknown>);
               return (
                 <th key={col.key} className={cn(
-                  'py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground first:pl-4',
+                  'py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap first:pl-4',
                   thWidth(col as Column<unknown>),
                   ALIGN[align],
                   isAct ? 'pl-2 pr-4' : 'pr-4',

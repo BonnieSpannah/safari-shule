@@ -29,6 +29,7 @@ export interface CreateTripInput {
   assistantUserId?: string | null;
   scheduledStart: string;
   direction: 'morning_pickup' | 'evening_dropoff';
+  targetTenantId?: string;
 }
 
 export async function listTrips(params?: { q?: string; status?: string; tenantId?: string; page?: number; pageSize?: number }): Promise<ListTripsResponse> {

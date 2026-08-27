@@ -22,9 +22,10 @@ export interface InviteUserInput {
   fullName: string;
   phone?: string;
   roleKeys: string[];
+  targetTenantId?: string;
 }
 
-export async function listUsers(params?: { q?: string; status?: string; page?: number; pageSize?: number }): Promise<ListUsersResponse> {
+export async function listUsers(params?: { q?: string; status?: string; tenantId?: string; roleKey?: string; page?: number; pageSize?: number }): Promise<ListUsersResponse> {
   const { data } = await api.get<ListUsersResponse>('/v1/users', { params });
   return data;
 }
@@ -35,6 +36,7 @@ export async function inviteUser(input: InviteUserInput): Promise<void> {
     fullName: input.fullName,
     phone: input.phone || undefined,
     roleKeys: input.roleKeys,
+    targetTenantId: input.targetTenantId || undefined,
   });
 }
 

@@ -15,6 +15,7 @@ export interface StaffMember {
   createdAt: string;
   updatedAt: string;
   tenant?: { id: string; name: string; slug: string } | null;
+  user?: { id: string; email: string } | null;
 }
 
 export interface ListStaffResponse {
@@ -32,12 +33,12 @@ export async function getStaffMember(id: string): Promise<StaffMember> {
   return data;
 }
 
-export async function createStaffMember(input: StaffInput): Promise<StaffMember> {
+export async function createStaffMember(input: StaffInput & { targetTenantId?: string }): Promise<StaffMember> {
   const { data } = await api.post<StaffMember>('/v1/staff', input);
   return data;
 }
 
-export async function updateStaffMember(id: string, input: Partial<StaffInput>): Promise<StaffMember> {
+export async function updateStaffMember(id: string, input: Partial<StaffInput> & { targetTenantId?: string; sourceTenantId?: string }): Promise<StaffMember> {
   const { data } = await api.patch<StaffMember>(`/v1/staff/${id}`, input);
   return data;
 }

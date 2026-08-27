@@ -71,10 +71,10 @@ export function FormModal({
               disabled={submitting}
               className="gap-1.5 bg-green-600 hover:bg-green-700 focus-visible:ring-green-600"
             >
+              {submitLabel}
               {submitting
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 : <ChevronRight className="h-3.5 w-3.5" />}
-              {submitLabel}
             </Button>
           </div>
         </form>
