@@ -22,4 +22,9 @@ class ApiConfig {
     'DEVICE_HMAC_SECRET',
     defaultValue: '',
   );
+
+  static const String fcmTokenEndpoint = String.fromEnvironment(
+    'FCM_TOKEN_ENDPOINT',
+    defaultValue: '/users/me/fcm-token',
+  );
 }

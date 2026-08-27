@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:mobile/core/config/env.dart';
 
 class PushNotificationsService {
   PushNotificationsService({required Dio client}) : _client = client;
@@ -44,9 +45,12 @@ class PushNotificationsService {
   }
 
   Future<void> _registerToken(String token) async {
+    if (ApiConfig.fcmTokenEndpoint.isEmpty) {
+      return;
+    }
     try {
       await _client.post<void>(
-        '/users/me/fcm-token',
+        ApiConfig.fcmTokenEndpoint,
         data: <String, Object?>{'token': token},
       );
     } on DioException {
