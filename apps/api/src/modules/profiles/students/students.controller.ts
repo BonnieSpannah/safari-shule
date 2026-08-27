@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { studentInput, paginationQuery } from '@safari-shule/shared-types';
 import { z } from 'zod';
@@ -29,8 +29,8 @@ export class StudentsController {
 
   @Get(':id')
   @RequirePermission('students.view')
-  one(@Param('id') id: string) {
-    return this.svc.byId(id);
+  one(@Param('id') id: string, @Query('tenantId') tenantId?: string) {
+    return this.svc.byId(id, tenantId);
   }
 
   @Post()

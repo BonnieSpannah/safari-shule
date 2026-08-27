@@ -14,6 +14,7 @@ export interface Parent {
   createdAt: string;
   updatedAt: string;
   tenant?: { id: string; name: string; slug: string } | null;
+  students?: { student: { id: string; legalName: string; admissionNumber: string; classroom: string | null } }[];
 }
 
 export interface ListParentsResponse {
@@ -26,12 +27,21 @@ export async function listParents(params?: { q?: string; tenantId?: string; page
   return data;
 }
 
-export async function createParent(input: ParentInput): Promise<Parent> {
+export async function getParent(id: string, tenantId?: string): Promise<Parent> {
+  const { data } = await api.get<Parent>(`/v1/parents/${id}`, { params: tenantId ? { tenantId } : undefined });
+  return data;
+}
+
+export async function linkStudentToParent(parentId: string, studentId: string, relation: string, sourceTenantId?: string): Promise<void> {
+  await api.post(`/v1/parents/${parentId}/students`, { studentId, relation, isPrimary: false, sourceTenantId });
+}
+
+export async function createParent(input: ParentInput & { targetTenantId?: string }): Promise<Parent> {
   const { data } = await api.post<Parent>('/v1/parents', input);
   return data;
 }
 
-export async function updateParent(id: string, input: Partial<ParentInput>): Promise<Parent> {
+export async function updateParent(id: string, input: Partial<ParentInput> & { targetTenantId?: string; sourceTenantId?: string }): Promise<Parent> {
   const { data } = await api.patch<Parent>(`/v1/parents/${id}`, input);
   return data;
 }

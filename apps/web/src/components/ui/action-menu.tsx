@@ -28,14 +28,16 @@ export function ActionMenu({ items }: ActionMenuProps) {
     item.permission ? perms.has(item.permission) : true,
   );
 
-  // Position the portal menu below the trigger button
+  // Position the portal menu — open downward, flip upward near viewport bottom
   const openMenu = () => {
     if (!triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
-    const menuWidth = 176; // min-w-[176px]
-    const spaceRight = window.innerWidth - rect.right;
-    const left = spaceRight >= menuWidth ? rect.right - menuWidth : rect.left;
-    setPos({ top: rect.bottom + 4, left });
+    const menuWidth = 176;
+    const menuHeight = visible.length * 40 + 8; // approx row height + padding
+    const left = Math.max(0, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 4));
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top = spaceBelow >= menuHeight ? rect.bottom + 4 : rect.top - menuHeight - 4;
+    setPos({ top, left });
     setOpen(true);
   };
 

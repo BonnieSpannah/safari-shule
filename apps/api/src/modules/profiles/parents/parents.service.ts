@@ -23,9 +23,10 @@ export class ParentsService {
     return paginated(data, total, q);
   }
 
-  async byId(id: string) {
+  async byId(id: string, sourceTenantId?: string) {
+    const tenantId = sourceTenantId ?? requireTenantId();
     const row = await this.prisma.parent.findFirst({
-      where: { id, tenantId: requireTenantId() },
+      where: { id, tenantId },
       include: { students: { include: { student: true } } },
     });
     if (!row) throw new NotFoundException();
@@ -51,23 +52,25 @@ export class ParentsService {
     });
   }
 
-  async update(id: string, patch: Partial<ParentInput>) {
-    const tenantId = requireTenantId();
-    const existing = await this.prisma.parent.findFirst({ where: { id, tenantId } });
+  async update(id: string, patch: Partial<ParentInput> & { targetTenantId?: string; sourceTenantId?: string }) {
+    const lookupTenantId = patch.sourceTenantId ?? patch.targetTenantId ?? requireTenantId();
+    const { targetTenantId, sourceTenantId: _s, ...fields } = patch;
+    const existing = await this.prisma.parent.findFirst({ where: { id, tenantId: lookupTenantId } });
     if (!existing) throw new NotFoundException();
-    const flex = patch.flexibleAttributes
-      ? await this.validator.validateAndNormalize(tenantId, 'parent', patch.flexibleAttributes)
+    const flex = fields.flexibleAttributes
+      ? await this.validator.validateAndNormalize(lookupTenantId, 'parent', fields.flexibleAttributes)
       : undefined;
     return this.prisma.parent.update({
       where: { id },
       data: {
-        ...(patch.legalName ? { legalName: patch.legalName } : {}),
-        ...(patch.phone ? { phoneE164: patch.phone } : {}),
-        ...(patch.email !== undefined ? { email: patch.email } : {}),
-        ...(patch.nationalId !== undefined ? { nationalId: patch.nationalId } : {}),
-        ...(patch.occupation !== undefined ? { occupation: patch.occupation } : {}),
-        ...(patch.dateOfBirth ? { dateOfBirth: new Date(patch.dateOfBirth) } : {}),
-        ...(patch.gender ? { gender: patch.gender as any } : {}),
+        ...(targetTenantId && targetTenantId !== existing.tenantId ? { tenantId: targetTenantId } : {}),
+        ...(fields.legalName ? { legalName: fields.legalName } : {}),
+        ...(fields.phone ? { phoneE164: fields.phone } : {}),
+        ...(fields.email !== undefined ? { email: fields.email } : {}),
+        ...(fields.nationalId !== undefined ? { nationalId: fields.nationalId } : {}),
+        ...(fields.occupation !== undefined ? { occupation: fields.occupation } : {}),
+        ...(fields.dateOfBirth ? { dateOfBirth: new Date(fields.dateOfBirth) } : {}),
+        ...(fields.gender ? { gender: fields.gender as any } : {}),
         ...(flex ? { flexibleAttributes: flex as any } : {}),
       },
     });
@@ -78,8 +81,8 @@ export class ParentsService {
     return { id };
   }
 
-  async linkStudent(parentId: string, studentId: string, relation: 'mother' | 'father' | 'guardian' | 'other', isPrimary: boolean) {
-    const tenantId = requireTenantId();
+  async linkStudent(parentId: string, studentId: string, relation: 'mother' | 'father' | 'guardian' | 'other', isPrimary: boolean, sourceTenantId?: string) {
+    const tenantId = sourceTenantId ?? requireTenantId();
     return this.prisma.parentStudent.create({
       data: { tenantId, parentId, studentId, relation: relation as any, isPrimary },
     });

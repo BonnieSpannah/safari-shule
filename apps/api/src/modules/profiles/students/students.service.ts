@@ -6,7 +6,6 @@ import { paginated, buildPagination } from '../../../common/pagination/paginatio
 import {
   studentInput,
   type StudentInput,
-  paginationQuery,
   type PaginationQuery,
 } from '@safari-shule/shared-types';
 
@@ -30,9 +29,10 @@ export class StudentsService {
     return paginated(data, total, q);
   }
 
-  async byId(id: string) {
+  async byId(id: string, sourceTenantId?: string) {
+    const tenantId = sourceTenantId ?? requireTenantId();
     const row = await this.prisma.student.findFirst({
-      where: { id, tenantId: requireTenantId() },
+      where: { id, tenantId },
       include: { parents: { include: { parent: true } }, caretakers: { include: { caretaker: true } } },
     });
     if (!row) throw new NotFoundException();
@@ -57,22 +57,26 @@ export class StudentsService {
     });
   }
 
-  async update(id: string, patch: Partial<StudentInput>) {
-    const tenantId = requireTenantId();
-    const existing = await this.prisma.student.findFirst({ where: { id, tenantId } });
+  async update(id: string, patch: Partial<StudentInput> & { targetTenantId?: string; sourceTenantId?: string }) {
+    // sourceTenantId = current tenant for lookup; targetTenantId = new tenant (may differ for reassignment)
+    const lookupTenantId = patch.sourceTenantId ?? requireTenantId();
+    const { targetTenantId, sourceTenantId: _s, ...fields } = patch;
+    const existing = await this.prisma.student.findFirst({ where: { id, tenantId: lookupTenantId } });
     if (!existing) throw new NotFoundException();
-    const flex = patch.flexibleAttributes
-      ? await this.validator.validateAndNormalize(tenantId, 'student', patch.flexibleAttributes)
+    const activeTenantId = targetTenantId ?? lookupTenantId;
+    const flex = fields.flexibleAttributes
+      ? await this.validator.validateAndNormalize(activeTenantId, 'student', fields.flexibleAttributes)
       : undefined;
     return this.prisma.student.update({
       where: { id },
       data: {
-        ...(patch.admissionNumber ? { admissionNumber: patch.admissionNumber } : {}),
-        ...(patch.legalName ? { legalName: patch.legalName } : {}),
-        ...(patch.birthCertificateNumber !== undefined ? { birthCertificateNumber: patch.birthCertificateNumber } : {}),
-        ...(patch.classroom !== undefined ? { classroom: patch.classroom } : {}),
-        ...(patch.dateOfBirth ? { dateOfBirth: new Date(patch.dateOfBirth) } : {}),
-        ...(patch.gender ? { gender: patch.gender as any } : {}),
+        ...(targetTenantId && targetTenantId !== existing.tenantId ? { tenantId: targetTenantId } : {}),
+        ...(fields.admissionNumber ? { admissionNumber: fields.admissionNumber } : {}),
+        ...(fields.legalName ? { legalName: fields.legalName } : {}),
+        ...(fields.birthCertificateNumber !== undefined ? { birthCertificateNumber: fields.birthCertificateNumber } : {}),
+        ...(fields.classroom !== undefined ? { classroom: fields.classroom } : {}),
+        ...(fields.dateOfBirth ? { dateOfBirth: new Date(fields.dateOfBirth) } : {}),
+        ...(fields.gender ? { gender: fields.gender as any } : {}),
         ...(flex ? { flexibleAttributes: flex as any } : {}),
       },
     });

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { parentInput, paginationQuery, PARENT_RELATIONS } from '@safari-shule/shared-types';
 import { z } from 'zod';
@@ -15,6 +15,7 @@ const linkSchema = z.object({
   studentId: z.string().uuid(),
   relation: z.enum(PARENT_RELATIONS).default('guardian'),
   isPrimary: z.boolean().default(false),
+  sourceTenantId: z.string().uuid().optional(),
 });
 
 @ApiTags('parents')
@@ -35,8 +36,8 @@ export class ParentsController {
 
   @Get(':id')
   @RequirePermission('parents.view')
-  one(@Param('id') id: string) {
-    return this.svc.byId(id);
+  one(@Param('id') id: string, @Query('tenantId') tenantId?: string) {
+    return this.svc.byId(id, tenantId);
   }
 
   @Post()
@@ -64,6 +65,6 @@ export class ParentsController {
   @RequirePermission('parents.edit')
   @Audited({ action: 'parent.link_student', entityType: 'parent', entityIdParam: 'id' })
   link(@Param('id') id: string, @ZodBody(linkSchema) body: z.infer<typeof linkSchema>) {
-    return this.svc.linkStudent(id, body.studentId, body.relation, body.isPrimary);
+    return this.svc.linkStudent(id, body.studentId, body.relation, body.isPrimary, body.sourceTenantId);
   }
 }

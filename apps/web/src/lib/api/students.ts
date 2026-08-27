@@ -15,6 +15,10 @@ export interface Student {
   tenant?: { id: string; name: string; slug: string } | null;
 }
 
+export interface StudentDetail extends Student {
+  parents: { parent: { id: string; legalName: string; phoneE164: string; email: string | null } }[];
+}
+
 export interface ListStudentsResponse {
   data: Student[];
   meta: { page: number; pageSize: number; total: number; pageCount: number };
@@ -25,8 +29,8 @@ export async function listStudents(params?: { q?: string; classroom?: string; ge
   return data;
 }
 
-export async function getStudent(id: string): Promise<Student> {
-  const { data } = await api.get<Student>(`/v1/students/${id}`);
+export async function getStudent(id: string, tenantId?: string): Promise<StudentDetail> {
+  const { data } = await api.get<StudentDetail>(`/v1/students/${id}`, { params: tenantId ? { tenantId } : undefined });
   return data;
 }
 
@@ -35,7 +39,7 @@ export async function createStudent(input: StudentInput & { targetTenantId?: str
   return data;
 }
 
-export async function updateStudent(id: string, input: Partial<StudentInput>): Promise<Student> {
+export async function updateStudent(id: string, input: Partial<StudentInput> & { targetTenantId?: string; sourceTenantId?: string }): Promise<Student> {
   const { data } = await api.patch<Student>(`/v1/students/${id}`, input);
   return data;
 }
