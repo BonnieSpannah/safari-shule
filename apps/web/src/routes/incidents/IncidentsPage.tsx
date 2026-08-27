@@ -11,6 +11,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { ActionMenu } from '@/components/ui/action-menu';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { FormModal } from '@/components/ui/form-modal';
@@ -197,6 +198,15 @@ export function IncidentsPage() {
         description="Track SOS and operational incidents. Auto-refreshes every 15 seconds."
       />
 
+      {incidentsQuery.error && (
+        <ErrorState
+          title="Failed to load incidents"
+          error={incidentsQuery.error}
+          onRetry={() => incidentsQuery.refetch()}
+        />
+      )}
+
+      {!incidentsQuery.error && (
       <DataTable
         title="Incident queue"
         description={total > 0 ? `${total} incident${total !== 1 ? 's' : ''}` : undefined}
@@ -247,6 +257,7 @@ export function IncidentsPage() {
           />
         }
       />
+      )}
 
       {selectedIncidentId && (
         <Card>
