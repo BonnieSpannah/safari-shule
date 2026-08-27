@@ -13,11 +13,27 @@
     "lint": "pnpm -r --parallel lint",
     "test": "pnpm -r --parallel test",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
+    "prepare": "husky",
     "api": "pnpm --filter @safari-shule/api",
     "web": "pnpm --filter @safari-shule/web",
     "types": "pnpm --filter @safari-shule/shared-types"
   },
+  "lint-staged": {
+    "apps/api/src/**/*.ts": [
+      "pnpm --filter @safari-shule/api exec eslint --max-warnings 0"
+    ],
+    "apps/web/src/**/*.{ts,tsx}": [
+      "pnpm --filter @safari-shule/web exec eslint --max-warnings 0"
+    ],
+    "**/*.{json,md,yml,yaml}": [
+      "pnpm exec prettier --write"
+    ]
+  },
   "devDependencies": {
+    "@commitlint/cli": "19.5.0",
+    "@commitlint/config-conventional": "19.5.0",
+    "husky": "9.1.6",
+    "lint-staged": "15.2.10",
     "prettier": "3.3.3",
     "typescript": "5.5.4"
   }

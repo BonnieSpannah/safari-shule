@@ -1,0 +1,117 @@
+name: Promote to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: SemVer version without prefix (example 1.2.3)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  deployments: write
+
+env:
+  REGISTRY: ghcr.io
+
+concurrency:
+  group: promote-production
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Fast-Forward, Tag and Deploy Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate semver input
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Version must be valid semver (without v prefix)."
+            exit 1
+          fi
+
+      - name: Fast-forward production branch from staging
+        id: ff
+        run: |
+          git fetch origin staging production || true
+
+          if ! git ls-remote --exit-code --heads origin staging > /dev/null; then
+            echo "::error::origin/staging does not exist. Run promote-staging first."
+            exit 1
+          fi
+
+          if git ls-remote --exit-code --heads origin production > /dev/null; then
+            git checkout -B production origin/production
+          else
+            git checkout -b production origin/staging
+          fi
+
+          git merge --ff-only origin/staging
+          git push origin production
+
+          HEAD_SHA=$(git rev-parse HEAD)
+          SHORT_SHA="${HEAD_SHA::7}"
+          TAG="v${{ github.event.inputs.version }}"
+
+          if git ls-remote --exit-code --tags origin "$TAG" > /dev/null; then
+            echo "::error::Tag $TAG already exists."
+            exit 1
+          fi
+
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger production deployment
+        env:
+          PRODUCTION_DEPLOY_WEBHOOK_URL: ${{ secrets.PRODUCTION_DEPLOY_WEBHOOK_URL }}
+          PRODUCTION_DEPLOY_WEBHOOK_TOKEN: ${{ secrets.PRODUCTION_DEPLOY_WEBHOOK_TOKEN }}
+        run: |
+          if [ -z "$PRODUCTION_DEPLOY_WEBHOOK_URL" ]; then
+            echo "::error::Missing required secret PRODUCTION_DEPLOY_WEBHOOK_URL"
+            exit 1
+          fi
+
+          AUTH_HEADER=""
+          if [ -n "$PRODUCTION_DEPLOY_WEBHOOK_TOKEN" ]; then
+            AUTH_HEADER="Authorization: Bearer $PRODUCTION_DEPLOY_WEBHOOK_TOKEN"
+          fi
+
+          curl --fail --show-error --silent --location \
+            --request POST \
+            --header "Content-Type: application/json" \
+            ${AUTH_HEADER:+--header "$AUTH_HEADER"} \
+            --data @- \
+            "$PRODUCTION_DEPLOY_WEBHOOK_URL" <<EOF
+          {
+            "environment": "production",
+            "commitSha": "${{ steps.ff.outputs.head_sha }}",
+            "tag": "${{ steps.ff.outputs.tag }}",
+            "images": {
+              "api": "${{ env.REGISTRY }}/${{ github.repository_owner }}/safari-shule-api:sha-${{ steps.ff.outputs.short_sha }}",
+              "web": "${{ env.REGISTRY }}/${{ github.repository_owner }}/safari-shule-web:sha-${{ steps.ff.outputs.short_sha }}"
+            }
+          }
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ff.outputs.tag }}
+          target_commitish: ${{ steps.ff.outputs.head_sha }}
+          name: ${{ steps.ff.outputs.tag }}
+          generate_release_notes: true
