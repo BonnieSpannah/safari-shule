@@ -1,0 +1,5 @@
+package ke.co.safarishule.mobile
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity : FlutterActivity()

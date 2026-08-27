@@ -3,6 +3,7 @@ COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 
 .PHONY: help bootstrap preflight uat-refresh up down logs ps restart migrate migrate-create seed reset \
         infra api-dev web-dev dev \
+	mobile-analyze mobile-test mobile-build-apk \
         db-generate db-migrate db-migrate-new db-seed-local db-studio \
         api-shell db-shell redis-shell test lint format clean \
         backup backup-list backup-verify restore-isolated db-masked-dump \
@@ -47,6 +48,15 @@ api-dev: ## Run API in watch mode — stops Docker API first, then hot-reloads o
 
 web-dev: ## Run web (Vite) natively — fastest HMR
 	pnpm --filter @safari-shule/web run dev
+
+mobile-analyze: ## Run Flutter analyzer for mobile app
+	$(MAKE) -C apps/mobile mobile-analyze
+
+mobile-test: ## Run Flutter tests for mobile app
+	$(MAKE) -C apps/mobile mobile-test
+
+mobile-build-apk: ## Build mobile Android APK
+	$(MAKE) -C apps/mobile mobile-build-apk
 
 # ─── Local Prisma operations (run natively, not inside the API container) ────
 
