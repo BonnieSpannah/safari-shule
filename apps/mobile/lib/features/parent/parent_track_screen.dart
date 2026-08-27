@@ -66,21 +66,34 @@ class _ParentTrackScreenState extends ConsumerState<ParentTrackScreen> {
       });
     });
 
-    return FlutterMap(
-      options: MapOptions(initialCenter: _location, initialZoom: 14),
+    return Column(
       children: <Widget>[
-        TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'ke.co.safarishule.mobile',
-        ),
-        MarkerLayer(markers: <Marker>[
-          Marker(
-            point: _location,
-            width: 44,
-            height: 44,
-            child: const Icon(Icons.directions_bus, color: Colors.blue, size: 32),
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: Text(
+            'Bus at ${_location.latitude.toStringAsFixed(4)}, ${_location.longitude.toStringAsFixed(4)}',
+            key: const Key('track-coordinates'),
           ),
-        ]),
+        ),
+        Expanded(
+          child: FlutterMap(
+            options: MapOptions(initialCenter: _location, initialZoom: 14),
+            children: <Widget>[
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'ke.co.safarishule.mobile',
+              ),
+              MarkerLayer(markers: <Marker>[
+                Marker(
+                  point: _location,
+                  width: 44,
+                  height: 44,
+                  child: const Icon(Icons.directions_bus, color: Colors.blue, size: 32),
+                ),
+              ]),
+            ],
+          ),
+        ),
       ],
     );
   }
