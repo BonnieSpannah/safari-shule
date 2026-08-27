@@ -11,7 +11,6 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { Pagination } from '@/components/ui/pagination';
 import { ActionMenu } from '@/components/ui/action-menu';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -20,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FormActions } from '@/components/ui/form-actions';
+import { EmptyState } from '@/components/ui/empty-state';
 
 import { usePermission, useAnyPermission } from '@/hooks/usePermission';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -119,6 +119,8 @@ function UsersTab() {
     {
       key: 'name',
       header: 'Name',
+      width: 'w-full',
+      exportValue: (u) => u.fullName || '—',
       render: (u) => (
         <div>
           <div className="font-medium">{u.fullName || '—'}</div>
@@ -136,6 +138,7 @@ function UsersTab() {
     {
       key: 'roles',
       header: 'Roles',
+      exportValue: (u) => u.userRoles.map((r) => humanizeRole(r.role.key)).join(', '),
       render: (u) => (
         <div className="flex flex-wrap gap-1">
           {u.userRoles.length > 0
@@ -148,12 +151,14 @@ function UsersTab() {
       key: 'status',
       header: 'Status',
       width: 'w-28',
+      exportValue: (u) => u.status,
       render: (u) => <StatusBadge status={u.status} />,
     },
     {
       key: 'lastLogin',
       header: 'Last sign-in',
       width: 'w-36',
+      exportValue: (u) => u.lastLoginAt ?? '',
       render: (u) => (
         <span className="text-xs text-muted-foreground">
           {u.lastLoginAt ? formatDistanceToNow(new Date(u.lastLoginAt), { addSuffix: true }) : '—'}
@@ -164,12 +169,14 @@ function UsersTab() {
       key: 'joined',
       header: 'Joined',
       width: 'w-28',
+      exportValue: (u) => format(new Date(u.createdAt), 'd MMM yyyy'),
       render: (u) => <span className="text-xs text-muted-foreground">{format(new Date(u.createdAt), 'd MMM yyyy')}</span>,
     },
     {
       key: 'actions',
       header: '',
       width: 'w-10',
+      align: 'right' as const,
       render: (u) => (
         <ActionMenu items={[
           u.status === 'active'
@@ -182,20 +189,32 @@ function UsersTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search users…" className="pl-9" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
-        </div>
-        {canManage && (
+      {canManage && (
+        <div className="flex justify-end">
           <Button onClick={() => setInviteOpen(true)} className="gap-1.5 bg-green-600 hover:bg-green-700">
             <UserPlus className="h-4 w-4" /> Invite user
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
-      <DataTable columns={columns} rows={users} rowKey={(u) => u.id} loading={query.isLoading} skeletonRows={PAGE_SIZE} empty={<div className="py-10 text-center text-sm text-muted-foreground">No users found.</div>} />
-      <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPrev={() => setPage((p) => p - 1)} onNext={() => setPage((p) => p + 1)} />
+      <DataTable
+        title="System users"
+        description={total > 0 ? `${total} user${total !== 1 ? 's' : ''}` : undefined}
+        search={<div className="relative w-full"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Search users…" className="pl-8 h-9 text-sm" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>}
+        exportFilename="settings-users"
+        selectable
+        page={page}
+        pageSize={PAGE_SIZE}
+        total={total}
+        onPrev={() => setPage((p) => p - 1)}
+        onNext={() => setPage((p) => p + 1)}
+        columns={columns}
+        rows={users}
+        rowKey={(u) => u.id}
+        loading={query.isLoading}
+        skeletonRows={PAGE_SIZE}
+        empty={<EmptyState icon={<UserPlus className="h-6 w-6" />} title="No users found" description={canManage ? 'Invite the first user above.' : undefined} />}
+      />
 
       {/* Invite dialog */}
       <Dialog open={inviteOpen} onOpenChange={(o) => { if (!o) { setInviteOpen(false); form.reset(); } }}>
@@ -338,6 +357,8 @@ function StaffTab() {
     {
       key: 'name',
       header: 'Name',
+      width: 'w-full',
+      exportValue: (s) => s.legalName,
       render: (s) => (
         <div>
           <div className="font-medium">{s.legalName}</div>
@@ -345,10 +366,11 @@ function StaffTab() {
         </div>
       ),
     },
-    { key: 'position', header: 'Position', render: (s) => <span className="text-muted-foreground">{s.position}</span> },
+    { key: 'position', header: 'Position', exportValue: (s) => s.position, render: (s) => <span className="text-muted-foreground">{s.position}</span> },
     {
       key: 'contact',
       header: 'Contact',
+      exportValue: (s) => [s.phoneE164, s.email].filter(Boolean).join(' | '),
       render: (s) => (
         <div>
           <div className="flex items-center gap-1 text-xs text-muted-foreground"><Phone className="h-3 w-3" />{s.phoneE164}</div>
@@ -356,13 +378,14 @@ function StaffTab() {
         </div>
       ),
     },
-    { key: 'gender', header: 'Gender', width: 'w-24', render: (s) => <span className="capitalize text-muted-foreground">{s.gender}</span> },
-    { key: 'joined', header: 'Added', width: 'w-28', render: (s) => <span className="text-xs text-muted-foreground">{format(new Date(s.createdAt), 'd MMM yyyy')}</span> },
-    ...(isSuperAdmin ? [{ key: 'tenant', header: 'Tenant', width: 'w-32' as const, render: (s: StaffMember) => <TenantBadge tenant={s.tenant} /> }] : []),
+    { key: 'gender', header: 'Gender', width: 'w-24', exportValue: (s) => s.gender, render: (s) => <span className="capitalize text-muted-foreground">{s.gender}</span> },
+    { key: 'joined', header: 'Added', width: 'w-28', exportValue: (s) => format(new Date(s.createdAt), 'd MMM yyyy'), render: (s) => <span className="text-xs text-muted-foreground">{format(new Date(s.createdAt), 'd MMM yyyy')}</span> },
+    ...(isSuperAdmin ? [{ key: 'tenant', header: 'Tenant', width: 'w-32' as const, exportValue: (s: StaffMember) => s.tenant?.name ?? '', render: (s: StaffMember) => <TenantBadge tenant={s.tenant} /> }] : []),
     {
       key: 'actions',
       header: '',
       width: 'w-10',
+      align: 'right' as const,
       render: (s) => (
         <ActionMenu items={[
           { label: 'Edit', permission: 'staff.edit', onClick: () => openEdit(s) },
@@ -374,21 +397,34 @@ function StaffTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search staff…" className="pl-9" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
-        </div>
-        {isSuperAdmin && <TenantFilterSelect tenants={tenants} value={tenantFilter} onChange={(v) => { setTenantFilter(v); setPage(1); }} />}
-        {canManage && (
+      {canManage && (
+        <div className="flex justify-end">
           <Button onClick={openCreate} className="gap-1.5 bg-green-600 hover:bg-green-700">
             <UserPlus className="h-4 w-4" /> Add staff
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
-      <DataTable columns={columns} rows={staff} rowKey={(s) => s.id} loading={query.isLoading} skeletonRows={PAGE_SIZE} empty={<div className="py-10 text-center text-sm text-muted-foreground">No staff members found.</div>} />
-      <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPrev={() => setPage((p) => p - 1)} onNext={() => setPage((p) => p + 1)} />
+      <DataTable
+        title="Staff members"
+        description={total > 0 ? `${total} staff member${total !== 1 ? 's' : ''}` : undefined}
+        search={<div className="relative w-full"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Search staff…" className="pl-8 h-9 text-sm" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>}
+        filters={isSuperAdmin ? <TenantFilterSelect tenants={tenants} value={tenantFilter} onChange={(v) => { setTenantFilter(v); setPage(1); }} /> : undefined}
+        filtersActive={tenantFilter !== ''}
+        exportFilename="settings-staff"
+        selectable
+        page={page}
+        pageSize={PAGE_SIZE}
+        total={total}
+        onPrev={() => setPage((p) => p - 1)}
+        onNext={() => setPage((p) => p + 1)}
+        columns={columns}
+        rows={staff}
+        rowKey={(s) => s.id}
+        loading={query.isLoading}
+        skeletonRows={PAGE_SIZE}
+        empty={<EmptyState icon={<UserPlus className="h-6 w-6" />} title="No staff members found" description={canManage ? 'Add the first staff member above.' : undefined} />}
+      />
 
       {/* Create/Edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) setDialogOpen(false); }}>

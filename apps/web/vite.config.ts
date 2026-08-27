@@ -11,10 +11,11 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
+        '@safari-shule/shared-types': path.resolve(__dirname, '../../packages/shared-types/src/index.ts'),
       },
     },
     optimizeDeps: {
-      include: ['@safari-shule/shared-types'],
+      exclude: ['@safari-shule/shared-types'],
     },
     server: {
       port: Number(env.WEB_PORT ?? 5173),
@@ -38,6 +39,29 @@ export default defineConfig(({ mode }) => {
       target: 'es2022',
       sourcemap: true,
       outDir: 'dist',
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('react-leaflet') || id.includes('/leaflet/') || id.includes('socket.io-client')) {
+              return 'maps-realtime';
+            }
+            if (id.includes('@tanstack/react-query')) {
+              return 'query';
+            }
+            if (id.includes('react-router-dom') || id.includes('/react/') || id.includes('/react-dom/')) {
+              return 'react-core';
+            }
+            if (id.includes('@radix-ui')) {
+              return 'radix-ui';
+            }
+            if (id.includes('exceljs') || id.includes('jspdf') || id.includes('jspdf-autotable') || id.includes('html2canvas')) {
+              return 'exports';
+            }
+            return 'vendor';
+          },
+        },
+      },
     },
   };
 });

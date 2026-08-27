@@ -9,10 +9,12 @@ import { format, formatDistanceToNow, subDays, startOfDay, endOfDay } from 'date
 import {
   Building2, Plus, Copy, CheckCircle2, Loader2, X, ChevronRight,
   MoreHorizontal, Pencil, ShieldOff, ShieldCheck, PauseCircle, Trash2, Eye,
-  Search, Filter, ChevronDown, Check, CalendarDays, RotateCcw,
+  Search, ChevronDown, Check, CalendarDays, RotateCcw,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { DataTable, type Column } from '@/components/ui/data-table';
+import { EmptyState as TableEmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
@@ -108,7 +110,6 @@ export function TenantsPage() {
   const [planFilters, setPlanFilters] = useState<string[]>([]);
   const [createdFrom, setCreatedFrom] = useState<string>(() => format(subDays(new Date(), 30), 'yyyy-MM-dd'));
   const [createdTo, setCreatedTo] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
-  const [showFilters, setShowFilters] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<'status' | 'plan' | 'date' | null>(null);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
@@ -147,6 +148,30 @@ export function TenantsPage() {
   const defaultFrom = format(subDays(new Date(), 30), 'yyyy-MM-dd');
   const hasActiveFilters = statusFilters.length > 0 || planFilters.length > 0 || createdFrom !== defaultFrom || createdTo !== todayStr;
   const resetFilters = () => setFilter(() => { setStatusFilters([]); setPlanFilters([]); setCreatedFrom(defaultFrom); setCreatedTo(todayStr); });
+
+  const activeFilterLabels = useMemo(() => {
+    const labels: string[] = [];
+
+    if (statusFilters.length > 0) {
+      labels.push(`Status: ${statusFilters.map((status) => status.charAt(0).toUpperCase() + status.slice(1)).join(', ')}`);
+    }
+
+    if (planFilters.length > 0) {
+      labels.push(`Plan: ${planFilters.map((plan) => plan.charAt(0).toUpperCase() + plan.slice(1)).join(', ')}`);
+    }
+
+    if (createdFrom || createdTo) {
+      if (createdFrom && createdTo) {
+        labels.push(`Created: ${format(new Date(`${createdFrom}T12:00:00`), 'd MMM yyyy')} – ${format(new Date(`${createdTo}T12:00:00`), 'd MMM yyyy')}`);
+      } else if (createdFrom) {
+        labels.push(`Created from: ${format(new Date(`${createdFrom}T12:00:00`), 'd MMM yyyy')}`);
+      } else if (createdTo) {
+        labels.push(`Created to: ${format(new Date(`${createdTo}T12:00:00`), 'd MMM yyyy')}`);
+      }
+    }
+
+    return labels;
+  }, [createdFrom, createdTo, planFilters, statusFilters]);
 
   // Close any open filter dropdown when clicking outside the filter panel
   const filterPanelRef = useRef<HTMLDivElement>(null);
@@ -269,10 +294,77 @@ export function TenantsPage() {
 
   const cancelCreate = () => { setShowCreateForm(false); setPreview(null); reset(); };
 
+  const columns: Column<Tenant>[] = [
+    {
+      key: 'tenant',
+      header: 'Tenant / School',
+      width: 'w-full',
+      exportValue: (tenant) => tenant.name,
+      render: (tenant) => (
+        <div>
+          <div className="font-medium">{tenant.name}</div>
+          <span className="mt-0.5 inline-block rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{tenant.slug}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'plan',
+      header: 'Plan',
+      exportValue: (tenant) => tenant.planTier,
+      render: (tenant) => <PlanBadge tier={tenant.planTier} />,
+    },
+    {
+      key: 'contact',
+      header: 'Contact',
+      exportValue: (tenant) => `${tenant.contactEmail}${tenant.contactPhone ? ` | ${tenant.contactPhone}` : ''}`,
+      render: (tenant) => (
+        <div>
+          <div className="text-muted-foreground">{tenant.contactEmail}</div>
+          {tenant.contactPhone && <div className="mt-0.5 text-xs text-muted-foreground">{tenant.contactPhone}</div>}
+        </div>
+      ),
+    },
+    {
+      key: 'since',
+      header: 'Since',
+      exportValue: (tenant) => tenant.createdAt,
+      render: (tenant) => (
+        <div>
+          <div className="text-muted-foreground">{format(new Date(tenant.createdAt), 'd MMM yyyy')}</div>
+          <div className="mt-0.5 text-xs text-muted-foreground">
+            {formatDistanceToNow(new Date(tenant.createdAt), { addSuffix: true })}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      exportValue: (tenant) => tenant.status,
+      render: (tenant) => <StatusBadge status={tenant.status} />,
+    },
+    {
+      key: 'actions',
+      header: '',
+      width: 'w-10',
+      align: 'right',
+      exportValue: () => undefined,
+      render: (tenant) => (
+        <TenantActions
+          tenant={tenant}
+          canManage={canManage}
+          onView={() => navigate(`/platform/tenants/${tenant.id}`)}
+          onEdit={() => openEdit(tenant)}
+          onAction={(action) => setConfirmAction({ tenant, action })}
+        />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
-        title="Tenants/Schools"
+        title="Tenants"
         description="Every school on Safari Shule. Create a new tenant to onboard a school."
         actions={!showCreateForm && canManage && (
           <Button onClick={() => { setShowCreateForm(true); setLastCreated(null); }}>
@@ -460,214 +552,167 @@ export function TenantsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Tenants table */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle>All tenants</CardTitle>
-              <CardDescription className="mt-0.5">
-                {tenantsQuery.isLoading ? 'Loading…' : `${filtered.length} of ${tenantsQuery.data?.length ?? 0} tenant${(tenantsQuery.data?.length ?? 0) === 1 ? '' : 's'}`}
-              </CardDescription>
-            </div>
-            {/* Search + filter toggle */}
-            <div className="flex w-full items-center gap-2 sm:w-auto">
-              <div className="relative flex-1 sm:w-64">
-                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search name, slug or email…"
-                  value={search}
-                  onChange={(e) => setFilter(() => setSearch(e.target.value))}
-                  className="pl-8 text-sm"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowFilters((v) => !v)}
-                title="Toggle filters"
-                className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-md border transition-colors ${showFilters || hasActiveFilters ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'}`}
-              >
-                <Filter className="h-4 w-4" />
-                {hasActiveFilters && (
-                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-primary" />
-                )}
-              </button>
-            </div>
+      <DataTable
+        title="All tenants"
+        description={tenantsQuery.isLoading ? 'Loading tenants…' : `${filtered.length} of ${tenantsQuery.data?.length ?? 0} tenant${(tenantsQuery.data?.length ?? 0) === 1 ? '' : 's'}`}
+        search={
+          <div className="relative w-full">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search tenants by name, slug or email"
+              value={search}
+              onChange={(e) => setFilter(() => setSearch(e.target.value))}
+              className="h-9 pl-8 text-sm"
+            />
           </div>
-
-          {/* Collapsible filter panel */}
-          {showFilters && (
-            <div ref={filterPanelRef} className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/30 p-3">
-
-              {/* Status multi-select */}
-              <div className="relative">
-                <button type="button" onClick={() => setOpenDropdown(openDropdown === 'status' ? null : 'status')}
-                  className={`flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors ${statusFilters.length > 0 ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'}`}>
-                  Status {statusFilters.length > 0 && <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">{statusFilters.length}</span>}
-                  <ChevronDown className="h-3 w-3 opacity-60" />
-                </button>
-                {openDropdown === 'status' && (
-                  <div className="absolute left-0 top-full z-20 mt-1 w-44 rounded-lg border border-border bg-card shadow-lg">
-                    <div className="p-1">
-                      {['active', 'pending', 'suspended', 'deactivated', 'cancelled', 'deleted'].map((s) => (
-                        <button key={s} type="button" onClick={() => toggleStatus(s)}
-                          className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs capitalize hover:bg-muted">
-                          <span className={`flex h-3.5 w-3.5 items-center justify-center rounded border ${statusFilters.includes(s) ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'}`}>
-                            {statusFilters.includes(s) && <Check className="h-2.5 w-2.5" />}
-                          </span>
-                          {s}
-                        </button>
-                      ))}
-                      {statusFilters.length > 0 && (
-                        <button type="button" onClick={() => setFilter(() => setStatusFilters([]))}
-                          className="mt-1 w-full rounded px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground border-t border-border pt-2">
-                          Clear
-                        </button>
-                      )}
-                    </div>
+        }
+        filters={
+          <div ref={filterPanelRef} className="flex w-full flex-wrap items-center gap-2">
+            <div className="relative">
+              <button type="button" onClick={() => setOpenDropdown(openDropdown === 'status' ? null : 'status')}
+                className={`flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors ${statusFilters.length > 0 ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'}`}>
+                Status {statusFilters.length > 0 && <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">{statusFilters.length}</span>}
+                <ChevronDown className="h-3 w-3 opacity-60" />
+              </button>
+              {openDropdown === 'status' && (
+                <div className="absolute left-0 top-full z-20 mt-1 w-44 rounded-lg border border-border bg-card shadow-lg">
+                  <div className="p-1">
+                    {['active', 'pending', 'suspended', 'deactivated', 'cancelled', 'deleted'].map((s) => (
+                      <button key={s} type="button" onClick={() => toggleStatus(s)}
+                        className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs capitalize hover:bg-muted">
+                        <span className={`flex h-3.5 w-3.5 items-center justify-center rounded border ${statusFilters.includes(s) ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'}`}>
+                          {statusFilters.includes(s) && <Check className="h-2.5 w-2.5" />}
+                        </span>
+                        {s}
+                      </button>
+                    ))}
+                    {statusFilters.length > 0 && (
+                      <button type="button" onClick={() => setFilter(() => setStatusFilters([]))}
+                        className="mt-1 w-full rounded border-t border-border px-2.5 pt-2 py-1 text-xs text-muted-foreground hover:text-foreground">
+                        Clear
+                      </button>
+                    )}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
+            </div>
 
-              {/* Plan multi-select */}
-              <div className="relative">
-                <button type="button" onClick={() => setOpenDropdown(openDropdown === 'plan' ? null : 'plan')}
-                  className={`flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors ${planFilters.length > 0 ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'}`}>
-                  Plan {planFilters.length > 0 && <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">{planFilters.length}</span>}
-                  <ChevronDown className="h-3 w-3 opacity-60" />
-                </button>
-                {openDropdown === 'plan' && (
-                  <div className="absolute left-0 top-full z-20 mt-1 w-36 rounded-lg border border-border bg-card shadow-lg">
-                    <div className="p-1">
-                      {['basic', 'pro', 'enterprise'].map((p) => (
-                        <button key={p} type="button" onClick={() => togglePlan(p)}
-                          className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs capitalize hover:bg-muted">
-                          <span className={`flex h-3.5 w-3.5 items-center justify-center rounded border ${planFilters.includes(p) ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'}`}>
-                            {planFilters.includes(p) && <Check className="h-2.5 w-2.5" />}
-                          </span>
-                          {p}
-                        </button>
-                      ))}
-                      {planFilters.length > 0 && (
-                        <button type="button" onClick={() => setFilter(() => setPlanFilters([]))}
-                          className="mt-1 w-full rounded px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground border-t border-border pt-2">
-                          Clear
-                        </button>
-                      )}
-                    </div>
+            <div className="relative">
+              <button type="button" onClick={() => setOpenDropdown(openDropdown === 'plan' ? null : 'plan')}
+                className={`flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors ${planFilters.length > 0 ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'}`}>
+                Plan {planFilters.length > 0 && <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">{planFilters.length}</span>}
+                <ChevronDown className="h-3 w-3 opacity-60" />
+              </button>
+              {openDropdown === 'plan' && (
+                <div className="absolute left-0 top-full z-20 mt-1 w-36 rounded-lg border border-border bg-card shadow-lg">
+                  <div className="p-1">
+                    {['basic', 'pro', 'enterprise'].map((plan) => (
+                      <button key={plan} type="button" onClick={() => togglePlan(plan)}
+                        className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs capitalize hover:bg-muted">
+                        <span className={`flex h-3.5 w-3.5 items-center justify-center rounded border ${planFilters.includes(plan) ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'}`}>
+                          {planFilters.includes(plan) && <Check className="h-2.5 w-2.5" />}
+                        </span>
+                        {plan}
+                      </button>
+                    ))}
+                    {planFilters.length > 0 && (
+                      <button type="button" onClick={() => setFilter(() => setPlanFilters([]))}
+                        className="mt-1 w-full rounded border-t border-border px-2.5 pt-2 py-1 text-xs text-muted-foreground hover:text-foreground">
+                        Clear
+                      </button>
+                    )}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
+            </div>
 
-              {/* Date range */}
-              <div className="relative">
-                <button type="button" onClick={() => setOpenDropdown(openDropdown === 'date' ? null : 'date')}
-                  className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors">
-                  <CalendarDays className="h-3.5 w-3.5" />
-                  {createdFrom && createdTo ? `${format(new Date(createdFrom + 'T12:00:00'), 'd MMM')} – ${format(new Date(createdTo + 'T12:00:00'), 'd MMM yyyy')}` : createdFrom ? `From ${format(new Date(createdFrom + 'T12:00:00'), 'd MMM yyyy')}` : 'All time'}
-                  <ChevronDown className="h-3 w-3 opacity-60" />
-                </button>
-                {openDropdown === 'date' && (
-                  <div className="absolute left-0 top-full z-20 mt-1 w-72 rounded-lg border border-border bg-card shadow-lg">
-                    <div className="p-3 space-y-3">
-                      <div className="grid grid-cols-2 gap-1">
-                        {DATE_PRESETS.map((preset) => {
-                          const active = createdFrom === preset.from && createdTo === preset.to;
-                          return (
-                            <button key={preset.label} type="button"
-                              onClick={() => setFilter(() => { setCreatedFrom(preset.from); setCreatedTo(preset.to); })}
-                              className={`rounded px-2 py-1.5 text-xs font-medium transition-colors text-left ${active ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
-                              {preset.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <div className="border-t border-border pt-2 space-y-2">
-                        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Custom range</p>
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1">
-                            <label className="block text-[10px] text-muted-foreground mb-0.5">From</label>
-                            <input type="date" value={createdFrom} max={createdTo || undefined}
-                              onChange={(e) => setFilter(() => setCreatedFrom(e.target.value))}
-                              className="w-full rounded border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring" />
-                          </div>
-                          <div className="flex-1">
-                            <label className="block text-[10px] text-muted-foreground mb-0.5">To</label>
-                            <input type="date" value={createdTo} min={createdFrom || undefined}
-                              onChange={(e) => setFilter(() => setCreatedTo(e.target.value))}
-                              className="w-full rounded border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring" />
-                          </div>
+            <div className="relative">
+              <button type="button" onClick={() => setOpenDropdown(openDropdown === 'date' ? null : 'date')}
+                className={`flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors ${(createdFrom !== defaultFrom || createdTo !== todayStr) ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'}`}>
+                <CalendarDays className="h-3.5 w-3.5" />
+                {createdFrom && createdTo ? `${format(new Date(createdFrom + 'T12:00:00'), 'd MMM')} – ${format(new Date(createdTo + 'T12:00:00'), 'd MMM yyyy')}` : createdFrom ? `From ${format(new Date(createdFrom + 'T12:00:00'), 'd MMM yyyy')}` : 'All time'}
+                <ChevronDown className="h-3 w-3 opacity-60" />
+              </button>
+              {openDropdown === 'date' && (
+                <div className="absolute left-0 top-full z-20 mt-1 w-72 rounded-lg border border-border bg-card shadow-lg">
+                  <div className="space-y-3 p-3">
+                    <div className="grid grid-cols-2 gap-1">
+                      {DATE_PRESETS.map((preset) => {
+                        const active = createdFrom === preset.from && createdTo === preset.to;
+                        return (
+                          <button key={preset.label} type="button"
+                            onClick={() => setFilter(() => { setCreatedFrom(preset.from); setCreatedTo(preset.to); })}
+                            className={`rounded px-2 py-1.5 text-left text-xs font-medium transition-colors ${active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
+                            {preset.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="space-y-2 border-t border-border pt-2">
+                      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Custom range</p>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <label className="mb-0.5 block text-[10px] text-muted-foreground">From</label>
+                          <input type="date" value={createdFrom} max={createdTo || undefined}
+                            onChange={(e) => setFilter(() => setCreatedFrom(e.target.value))}
+                            className="w-full rounded border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring" />
+                        </div>
+                        <div className="flex-1">
+                          <label className="mb-0.5 block text-[10px] text-muted-foreground">To</label>
+                          <input type="date" value={createdTo} min={createdFrom || undefined}
+                            onChange={(e) => setFilter(() => setCreatedTo(e.target.value))}
+                            className="w-full rounded border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring" />
                         </div>
                       </div>
                     </div>
                   </div>
-                )}
-              </div>
-
-              {hasActiveFilters && (
-                <button type="button" onClick={resetFilters}
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground ml-1">
-                  <X className="h-3 w-3" /> Reset all
-                </button>
+                </div>
               )}
             </div>
-          )}
-        </CardHeader>
-        <CardContent>
-          {tenantsQuery.isLoading && <ListSkeleton />}
-          {tenantsQuery.isError && (
+
+            {activeFilterLabels.map((label) => (
+              <span key={label} className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground">
+                {label}
+              </span>
+            ))}
+
+            {(hasActiveFilters || search.trim()) && (
+              <button type="button" onClick={() => { setSearch(''); resetFilters(); }}
+                className="ml-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                <X className="h-3 w-3" /> Clear all
+              </button>
+            )}
+          </div>
+        }
+        filtersActive={hasActiveFilters}
+        exportFilename="tenants"
+        selectable
+        page={page}
+        pageSize={PAGE_SIZE}
+        total={filtered.length}
+        onPrev={() => setPage((p) => Math.max(1, p - 1))}
+        onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+        columns={columns}
+        rows={paginated}
+        rowKey={(tenant) => tenant.id}
+        loading={tenantsQuery.isLoading}
+        skeletonRows={PAGE_SIZE}
+        empty={
+          tenantsQuery.isError ? (
             <div className="rounded-md border border-danger/30 bg-danger/5 p-4 text-sm text-danger">
               Failed to load tenants. Retry the page or check your connection.
             </div>
-          )}
-          {tenantsQuery.data?.length === 0 && <EmptyState />}
-          {!tenantsQuery.isLoading && tenantsQuery.data && tenantsQuery.data.length > 0 && filtered.length === 0 && (
-            <div className="py-10 text-center text-sm text-muted-foreground">No tenants match your filters.</div>
-          )}
-          {paginated.length > 0 && (
-            <>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      <th className="py-3 pr-4 text-left font-medium w-full">Tenant / School</th>
-                      <th className="py-3 pr-4 text-left font-medium">Plan</th>
-                      <th className="py-3 pr-4 text-left font-medium">Contact</th>
-                      <th className="py-3 pr-4 text-left font-medium">Since</th>
-                      <th className="py-3 pr-4 text-left font-medium">Status</th>
-                      <th className="py-3 pl-2 text-right font-medium w-10">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginated.map((t) => (
-                      <TenantRow
-                        key={t.id}
-                        tenant={t}
-                        canManage={canManage}
-                        onView={() => navigate(`/platform/tenants/${t.id}`)}
-                        onEdit={() => openEdit(t)}
-                        onAction={(action) => setConfirmAction({ tenant: t, action })}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {totalPages > 1 && (
-                <div className="mt-4 flex items-center justify-between border-t border-border pt-3 text-sm text-muted-foreground">
-                  <span className="text-xs">{((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
-                  <div className="flex items-center gap-1">
-                    <button type="button" disabled={page === 1} onClick={() => setPage((p) => p - 1)}
-                      className="rounded px-2.5 py-1 text-xs font-medium hover:bg-muted disabled:opacity-40">← Prev</button>
-                    <span className="px-2 text-xs">{page} / {totalPages}</span>
-                    <button type="button" disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}
-                      className="rounded px-2.5 py-1 text-xs font-medium hover:bg-muted disabled:opacity-40">Next →</button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
+          ) : tenantsQuery.data?.length === 0 ? (
+            <EmptyState />
+          ) : (
+            <TableEmptyState
+              icon={<Building2 className="h-6 w-6" />}
+              title="No tenants match your filters"
+              description="Adjust the search or filters to widen the result set."
+            />
+          )
+        }
+      />
     </div>
   );
 }
@@ -723,7 +768,7 @@ function SchoolFields({
 
 // ─── Table row ────────────────────────────────────────────────────────────────
 
-function TenantRow({ tenant: t, canManage, onView, onEdit, onAction }: {
+function TenantActions({ tenant: t, canManage, onView, onEdit, onAction }: {
   tenant: Tenant;
   canManage: boolean;
   onView: () => void;
@@ -732,63 +777,42 @@ function TenantRow({ tenant: t, canManage, onView, onEdit, onAction }: {
 }) {
   const availableActions = STATUS_ACTIONS[t.status] ?? [];
   return (
-    <tr
-    className="border-b border-border/40 last:border-0 hover:bg-muted/30 transition-colors">
-      <td className="py-3 pr-4">
-        <div className="font-medium">{t.name}</div>
-        <span className="mt-0.5 inline-block rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{t.slug}</span>
-      </td>
-      <td className="py-3 pr-4"><PlanBadge tier={t.planTier} /></td>
-      <td className="py-3 pr-4">
-        <div className="text-muted-foreground">{t.contactEmail}</div>
-        {t.contactPhone && <div className="mt-0.5 text-xs text-muted-foreground">{t.contactPhone}</div>}
-      </td>
-      <td className="py-3 pr-4">
-        <div className="text-muted-foreground">{format(new Date(t.createdAt), 'd MMM yyyy')}</div>
-        <div className="mt-0.5 text-xs text-muted-foreground">
-          {formatDistanceToNow(new Date(t.createdAt), { addSuffix: true })}
-        </div>
-      </td>
-      <td className="py-3 pr-4"><StatusBadge status={t.status} /></td>
-      <td className="py-3 pl-2 text-right">
-        {canManage && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="rounded p-1.5 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="Tenant actions"
+    canManage ? (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="rounded p-1.5 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Tenant actions"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44">
+          <DropdownMenuItem onSelect={onView} className="gap-2">
+            <Eye className="h-4 w-4" /> View
+          </DropdownMenuItem>
+          {t.status !== 'deleted' && (
+            <DropdownMenuItem onSelect={onEdit} className="gap-2">
+              <Pencil className="h-4 w-4" /> Edit
+            </DropdownMenuItem>
+          )}
+          {availableActions.length > 0 && <DropdownMenuSeparator />}
+          {availableActions.map((action) => {
+            const meta = ACTION_META[action];
+            return (
+              <DropdownMenuItem
+                key={action}
+                onSelect={() => onAction(action)}
+                className={`gap-2 ${meta.danger ? 'text-destructive focus:text-destructive' : ''}`}
               >
-                <MoreHorizontal className="h-4 w-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem onSelect={onView} className="gap-2">
-                <Eye className="h-4 w-4" /> View
+                {meta.icon} {meta.label}
               </DropdownMenuItem>
-              {t.status !== 'deleted' && (
-                <DropdownMenuItem onSelect={onEdit} className="gap-2">
-                  <Pencil className="h-4 w-4" /> Edit
-                </DropdownMenuItem>
-              )}
-              {availableActions.length > 0 && <DropdownMenuSeparator />}
-              {availableActions.map((action) => {
-                const meta = ACTION_META[action];
-                return (
-                  <DropdownMenuItem
-                    key={action}
-                    onSelect={() => onAction(action)}
-                    className={`gap-2 ${meta.danger ? 'text-destructive focus:text-destructive' : ''}`}
-                  >
-                    {meta.icon} {meta.label}
-                  </DropdownMenuItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </td>
-    </tr>
+            );
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    ) : null
   );
 }
 

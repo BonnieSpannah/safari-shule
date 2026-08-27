@@ -579,7 +579,7 @@ export function DataTable<T>({
               <div className="flex-1 min-w-0 max-w-sm">
                 {search}
               </div>
-              {hasExport && !selectable && (
+              {hasExport && (
                 <ExportMenu rows={rows} exportCols={exportCols} filename={exportFilename} title={title ?? 'Export'} />
               )}
               {filters && (

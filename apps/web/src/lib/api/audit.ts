@@ -20,7 +20,39 @@ export interface ListAuditResponse {
   meta: { page: number; pageSize: number; total: number; pageCount: number };
 }
 
+export interface ClientAuditEvent {
+  sessionId?: string;
+  kind:
+    | 'view'
+    | 'print'
+    | 'download'
+    | 'share'
+    | 'copy'
+    | 'screenshot_attempt'
+    | 'visibility_change'
+    | 'idle_start'
+    | 'idle_resume'
+    | 'geo_change'
+    | 'export_generated'
+    | 'bulk_action'
+    | 'role_switch'
+    | 'impersonation_start'
+    | 'impersonation_end';
+  resource?: string;
+  resourceId?: string;
+  path?: string;
+  traceId?: string;
+  deviceFingerprint?: string;
+  geoHint?: string;
+  payload?: Record<string, unknown>;
+}
+
 export async function listAuditLogs(params?: { q?: string; action?: string; entityType?: string; tenantId?: string; page?: number; pageSize?: number }): Promise<ListAuditResponse> {
   const { data } = await api.get<ListAuditResponse>('/v1/audit', { params });
+  return data;
+}
+
+export async function postClientAuditEvents(events: ClientAuditEvent[]): Promise<{ accepted: number }> {
+  const { data } = await api.post<{ accepted: number }>('/v1/audit/events', { events });
   return data;
 }
