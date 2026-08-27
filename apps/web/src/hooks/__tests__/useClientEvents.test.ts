@@ -130,8 +130,10 @@ describe('useClientEvents', () => {
       await result.current.emit('copy');
     });
 
-    const call = vi.mocked(api.post).mock.calls[0];
-    expect(call[1]).toHaveProperty('timestamp');
-    expect(typeof call[1].timestamp).toBe('string');
+    const calls = vi.mocked(api.post).mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    const call = calls[0];
+    expect(call?.[1]).toHaveProperty('timestamp');
+    expect(typeof (call?.[1] as Record<string, unknown>)?.timestamp).toBe('string');
   });
 });
