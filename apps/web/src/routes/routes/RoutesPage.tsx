@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { Route as RouteIcon, Plus, Search, Pencil, Power, MapPin } from 'lucide-react';
+import { Route as RouteIcon, Plus, Search, Pencil, Power, MapPin, Eye } from 'lucide-react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -15,6 +15,7 @@ import { FormModal } from '@/components/ui/form-modal';
 import { FormField } from '@/components/ui/form-field';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
@@ -57,7 +58,7 @@ export function RoutesPage() {
     emit('view', { entityType: 'route_list' });
   }, [emit]);
   const [search, setSearch] = useState(''); const [activeFilter, setActiveFilter] = useState(''); const [tenantFilter, setTenantFilter] = useState(''); const [page, setPage] = useState(1);
-  const [dialogOpen, setDialogOpen] = useState(false); const [editing, setEditing] = useState<Route | null>(null); const [toggleTarget, setToggleTarget] = useState<Route | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false); const [editing, setEditing] = useState<Route | null>(null); const [toggleTarget, setToggleTarget] = useState<Route | null>(null); const [viewTarget, setViewTarget] = useState<Route | null>(null);
   const dSearch = useDebounce(search, 300);
 
   const query = useQuery({ queryKey: ['routes', dSearch, activeFilter, tenantFilter, page], queryFn: () => listRoutes({ q: dSearch || undefined, isActive: activeFilter || undefined, tenantId: tenantFilter || undefined, page, pageSize: PAGE_SIZE }), placeholderData: (prev) => prev });
@@ -85,7 +86,7 @@ export function RoutesPage() {
     { key: 'students', header: 'Students', exportValue: (r) => r._count?.studentAssignments ?? 0, render: (r) => <span className="text-sm text-muted-foreground">{r._count?.studentAssignments ?? '—'}</span> },
     { key: 'added', header: 'Added', exportValue: (r) => format(new Date(r.createdAt), 'd MMM yyyy'), render: (r) => <span className="whitespace-nowrap text-xs text-muted-foreground">{format(new Date(r.createdAt), 'd MMM yyyy')}</span> },
     ...(isSuperAdmin ? [{ key: 'tenant', header: 'Tenant', render: (r: Route) => <TenantBadge tenant={r.tenant} /> }] : []),
-    { key: 'actions', header: '', align: 'right' as const, width: 'w-10', render: (r) => (<ActionMenu items={[{ label: 'Edit details', icon: <Pencil className="h-4 w-4" />, permission: 'routes.manage', onClick: () => openEdit(r) }, { label: r.isActive ? 'Deactivate' : 'Activate', icon: <Power className="h-4 w-4" />, permission: 'routes.manage', onClick: () => setToggleTarget(r), variant: r.isActive ? 'destructive' as const : 'default' as const }]} />) },
+    { key: 'actions', header: '', align: 'right' as const, width: 'w-10', render: (r) => (<ActionMenu items={[{ label: 'View', icon: <Eye className="h-4 w-4" />, permission: 'routes.view', onClick: () => setViewTarget(r) }, { label: 'Edit details', icon: <Pencil className="h-4 w-4" />, permission: 'routes.manage', onClick: () => openEdit(r) }, { label: r.isActive ? 'Deactivate' : 'Activate', icon: <Power className="h-4 w-4" />, permission: 'routes.manage', onClick: () => setToggleTarget(r), variant: r.isActive ? 'destructive' as const : 'default' as const }]} />) },
   ];
 
   return (
@@ -128,6 +129,37 @@ export function RoutesPage() {
       </FormModal>
 
       {toggleTarget && <ConfirmDialog open onOpenChange={(o) => { if (!o) setToggleTarget(null); }} title={toggleTarget.isActive ? 'Deactivate route?' : 'Activate route?'} description={toggleTarget.isActive ? `Students assigned to "${toggleTarget.name}" will not be picked up while inactive.` : `"${toggleTarget.name}" will resume normal operations.`} confirmLabel={toggleTarget.isActive ? 'Deactivate' : 'Activate'} destructive={toggleTarget.isActive} onConfirm={() => toggleMutation.mutate(toggleTarget)} pending={toggleMutation.isPending} />}
+      {viewTarget && <RouteDetailDialog route={viewTarget} onClose={() => setViewTarget(null)} />}
     </div>
+  );
+}
+
+function RouteDetailDialog({ route: r, onClose }: { route: Route; onClose: () => void }) {
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent hideCloseButton className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{r.name}</DialogTitle>
+          {r.tenant && <p className="text-sm text-muted-foreground">{r.tenant.name}</p>}
+        </DialogHeader>
+        {r.description && <p className="text-sm text-muted-foreground -mt-2">{r.description}</p>}
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+          {([
+            ['Status', r.isActive ? 'Active' : 'Inactive'],
+            ['Bus stops', String(r._count?.busStops ?? '—')],
+            ['Students assigned', String(r._count?.studentAssignments ?? '—')],
+            ['Added', format(new Date(r.createdAt), 'd MMM yyyy')],
+          ] as [string, string][]).map(([label, value]) => (
+            <div key={label}>
+              <p className="text-xs text-muted-foreground">{label}</p>
+              <p className="font-medium">{value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end pt-2">
+          <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

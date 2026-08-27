@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
-import { Radio, Plus, Search, Play, Square, X as XIcon } from 'lucide-react';
+import { Radio, Plus, Search, Play, Square, X as XIcon, Eye } from 'lucide-react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -15,6 +15,7 @@ import { FormModal } from '@/components/ui/form-modal';
 import { FormField } from '@/components/ui/form-field';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
@@ -45,7 +46,7 @@ export function TripsPage() {
   const { isSuperAdmin, tenants } = useTenantFilter();
   const qc = useQueryClient();
   const [search, setSearch] = useState(''); const [statusFilter, setStatusFilter] = useState(''); const [tenantFilter, setTenantFilter] = useState(''); const [page, setPage] = useState(1);
-  const [dispatchOpen, setDispatchOpen] = useState(false); const [actionTarget, setActionTarget] = useState<{ trip: Trip; action: 'start' | 'end' | 'cancel' } | null>(null);
+  const [dispatchOpen, setDispatchOpen] = useState(false); const [actionTarget, setActionTarget] = useState<{ trip: Trip; action: 'start' | 'end' | 'cancel' } | null>(null); const [viewTarget, setViewTarget] = useState<Trip | null>(null);
   const dSearch = useDebounce(search, 300);
 
   const query = useQuery({ queryKey: ['trips', dSearch, statusFilter, tenantFilter, page], queryFn: () => listTrips({ q: dSearch || undefined, status: statusFilter || undefined, tenantId: tenantFilter || undefined, page, pageSize: PAGE_SIZE }), placeholderData: (prev) => prev, refetchInterval: 15_000 });
@@ -71,6 +72,7 @@ export function TripsPage() {
     { key: 'started', header: 'Started', render: (t) => <span className="whitespace-nowrap text-xs text-muted-foreground">{t.startedAt ? formatDistanceToNow(new Date(t.startedAt), { addSuffix: true }) : '—'}</span> },
     ...(isSuperAdmin ? [{ key: 'tenant', header: 'Tenant', render: (t: Trip) => <TenantBadge tenant={t.tenant} /> }] : []),
     { key: 'actions', header: '', align: 'right' as const, width: 'w-10', render: (t) => (<ActionMenu items={[
+      { label: 'View', icon: <Eye className="h-4 w-4" />, permission: 'trips.view', onClick: () => setViewTarget(t) },
       ...(t.status === 'scheduled' ? [{ label: 'Start trip', icon: <Play className="h-4 w-4" />, permission: 'trips.dispatch', onClick: () => setActionTarget({ trip: t, action: 'start' }) }] : []),
       ...(t.status === 'in_progress' ? [{ label: 'End trip', icon: <Square className="h-4 w-4" />, permission: 'trips.dispatch', onClick: () => setActionTarget({ trip: t, action: 'end' }) }] : []),
       ...(t.status !== 'completed' && t.status !== 'cancelled' ? [{ label: 'Cancel', icon: <XIcon className="h-4 w-4" />, permission: 'trips.dispatch', onClick: () => setActionTarget({ trip: t, action: 'cancel' }), variant: 'destructive' as const }] : []),
@@ -118,6 +120,38 @@ export function TripsPage() {
       </FormModal>
 
       {actionTarget && <ConfirmDialog open onOpenChange={(o) => { if (!o) setActionTarget(null); }} title={actionTarget.action === 'start' ? 'Start trip?' : actionTarget.action === 'end' ? 'End trip?' : 'Cancel trip?'} description={actionTarget.action === 'start' ? `Mark "${actionTarget.trip.route?.name}" as in progress.` : actionTarget.action === 'end' ? `Mark "${actionTarget.trip.route?.name}" as completed.` : `Cancel "${actionTarget.trip.route?.name}". This cannot be undone.`} confirmLabel={actionTarget.action === 'start' ? 'Start' : actionTarget.action === 'end' ? 'End trip' : 'Cancel trip'} destructive={actionTarget.action === 'cancel'} onConfirm={() => actionMutation.mutate(actionTarget)} pending={actionMutation.isPending} />}
+      {viewTarget && <TripDetailDialog trip={viewTarget} onClose={() => setViewTarget(null)} />}
     </div>
+  );
+}
+
+function TripDetailDialog({ trip: t, onClose }: { trip: Trip; onClose: () => void }) {
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent hideCloseButton className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t.route?.name ?? t.routeId}</DialogTitle>
+          {t.tenant && <p className="text-sm text-muted-foreground">{t.tenant.name}</p>}
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+          {([
+            ['Vehicle', t.vehicle ? `${t.vehicle.registration} — ${t.vehicle.make} ${t.vehicle.model}` : '—'],
+            ['Direction', t.direction.replace('_', ' ')],
+            ['Status', t.status.replace('_', ' ')],
+            ['Scheduled', format(new Date(t.scheduledStart), 'd MMM yyyy, HH:mm')],
+            ['Started', t.startedAt ? format(new Date(t.startedAt), 'd MMM yyyy, HH:mm') : '—'],
+            ['Ended', t.endedAt ? format(new Date(t.endedAt), 'd MMM yyyy, HH:mm') : '—'],
+          ] as [string, string][]).map(([label, value]) => (
+            <div key={label}>
+              <p className="text-xs text-muted-foreground">{label}</p>
+              <p className="font-medium capitalize">{value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end pt-2">
+          <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

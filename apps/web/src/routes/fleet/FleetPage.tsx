@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { Bus, Plus, Search, Pencil, Trash2 } from 'lucide-react';
+import { Bus, Plus, Search, Pencil, Trash2, Eye } from 'lucide-react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -15,6 +15,7 @@ import { FormModal } from '@/components/ui/form-modal';
 import { FormField } from '@/components/ui/form-field';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { TenantSelectorField } from '@/components/ui/tenant-selector-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,7 +53,7 @@ export function FleetPage() {
   const { isSuperAdmin, tenants } = useTenantFilter();
   const qc = useQueryClient();
   const [search, setSearch] = useState(''); const [statusFilter, setStatusFilter] = useState(''); const [ownershipFilter, setOwnershipFilter] = useState(''); const [tenantFilter, setTenantFilter] = useState(''); const [page, setPage] = useState(1);
-  const [dialogOpen, setDialogOpen] = useState(false); const [editing, setEditing] = useState<Vehicle | null>(null); const [deleteTarget, setDeleteTarget] = useState<Vehicle | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false); const [editing, setEditing] = useState<Vehicle | null>(null); const [deleteTarget, setDeleteTarget] = useState<Vehicle | null>(null); const [viewTarget, setViewTarget] = useState<Vehicle | null>(null);
   const dSearch = useDebounce(search, 300);
 
   const query = useQuery({ queryKey: ['vehicles', dSearch, statusFilter, ownershipFilter, tenantFilter, page], queryFn: () => listVehicles({ q: dSearch || undefined, status: statusFilter || undefined, ownership: ownershipFilter || undefined, tenantId: tenantFilter || undefined, page, pageSize: PAGE_SIZE }), placeholderData: (prev) => prev });
@@ -81,7 +82,7 @@ export function FleetPage() {
     { key: 'odometer', header: 'Odometer', exportValue: (v) => `${v.odometerKm} km`, render: (v) => <span className="whitespace-nowrap text-xs text-muted-foreground">{v.odometerKm.toLocaleString()} km</span> },
     { key: 'added', header: 'Added', exportValue: (v) => format(new Date(v.createdAt), 'd MMM yyyy'), render: (v) => <span className="whitespace-nowrap text-xs text-muted-foreground">{format(new Date(v.createdAt), 'd MMM yyyy')}</span> },
     ...(isSuperAdmin ? [{ key: 'tenant', header: 'Tenant', render: (v: Vehicle) => <TenantBadge tenant={v.tenant} /> }] : []),
-    { key: 'actions', header: '', align: 'right' as const, width: 'w-10', render: (v) => (<ActionMenu items={[{ label: 'Edit', icon: <Pencil className="h-4 w-4" />, permission: 'vehicles.edit', onClick: () => openEdit(v) }, { label: 'Remove', icon: <Trash2 className="h-4 w-4" />, permission: 'vehicles.delete', onClick: () => setDeleteTarget(v), variant: 'destructive' }]} />) },
+    { key: 'actions', header: '', align: 'right' as const, width: 'w-10', render: (v) => (<ActionMenu items={[{ label: 'View', icon: <Eye className="h-4 w-4" />, permission: 'vehicles.view', onClick: () => setViewTarget(v) }, { label: 'Edit', icon: <Pencil className="h-4 w-4" />, permission: 'vehicles.edit', onClick: () => openEdit(v) }, { label: 'Remove', icon: <Trash2 className="h-4 w-4" />, permission: 'vehicles.delete', onClick: () => setDeleteTarget(v), variant: 'destructive' }]} />) },
   ];
 
   return (
@@ -125,6 +126,38 @@ export function FleetPage() {
       </FormModal>
 
       {deleteTarget && <ConfirmDialog open onOpenChange={(o) => { if (!o) setDeleteTarget(null); }} title="Remove vehicle?" description={`${deleteTarget.registration} (${deleteTarget.make} ${deleteTarget.model}) will be permanently removed.`} confirmLabel="Remove" destructive onConfirm={() => deleteMutation.mutate(deleteTarget.id)} pending={deleteMutation.isPending} />}
+      {viewTarget && <VehicleDetailDialog vehicle={viewTarget} onClose={() => setViewTarget(null)} />}
     </div>
+  );
+}
+
+function VehicleDetailDialog({ vehicle: v, onClose }: { vehicle: Vehicle; onClose: () => void }) {
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent hideCloseButton className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{v.make} {v.model} <span className="font-mono text-base font-normal text-muted-foreground">{v.registration}</span></DialogTitle>
+          {v.tenant && <p className="text-sm text-muted-foreground">{v.tenant.name}</p>}
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+          {([
+            ['Year', String(v.year)],
+            ['Seats', String(v.capacity)],
+            ['Ownership', v.ownership === 'school' ? 'School-owned' : 'Hired'],
+            ['Status', v.status],
+            ['Odometer', `${v.odometerKm.toLocaleString()} km`],
+            ['Added', format(new Date(v.createdAt), 'd MMM yyyy')],
+          ] as [string, string][]).map(([label, value]) => (
+            <div key={label}>
+              <p className="text-xs text-muted-foreground">{label}</p>
+              <p className="font-medium capitalize">{value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end pt-2">
+          <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

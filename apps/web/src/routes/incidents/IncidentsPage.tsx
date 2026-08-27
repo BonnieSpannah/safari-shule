@@ -167,7 +167,7 @@ export function IncidentsPage() {
         <ActionMenu
           items={[
             {
-              label: 'View details',
+              label: 'View',
               permission: 'incidents.view',
               onClick: () => setSelectedIncidentId(i.id),
             },
