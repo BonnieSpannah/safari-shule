@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Controller, Get, Param, Patch, Post, Req, Body } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import type { Request } from 'express';
@@ -43,6 +43,13 @@ export class RoutesController {
   @Audited({ action: 'route.create', entityType: 'route' })
   create(@ZodBody(routeInput) body: z.infer<typeof routeInput>) {
     return this.svc.createRoute(body);
+  }
+
+  @Patch('routes/:id')
+  @RequirePermission('routes.manage')
+  @Audited({ action: 'route.update', entityType: 'route', entityIdParam: 'id' })
+  patch(@Param('id') id: string, @Body() body: { name?: string; description?: string | null; isActive?: boolean; targetTenantId?: string }) {
+    return this.svc.patchRoute(id, body);
   }
 
   @Post('geofences')

@@ -16,6 +16,7 @@ import { FormField } from '@/components/ui/form-field';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { TenantSelectorField } from '@/components/ui/tenant-selector-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
@@ -42,6 +43,7 @@ function MapPlaceholder() {
 }
 
 const schema = z.object({
+  targetTenantId: z.string().uuid().or(z.literal('')).optional(),
   name: z.string().min(1, 'Enter route name').max(80),
   description: z.string().max(500).optional().or(z.literal('')),
   isActive: z.boolean().default(true),
@@ -66,10 +68,12 @@ export function RoutesPage() {
   const form = useForm<Form>({ resolver: zodResolver(schema), mode: 'onChange' });
 
   const openCreate = () => { setEditing(null); form.reset({ isActive: true }); setDialogOpen(true); };
-  const openEdit = (r: Route) => { setEditing(r); form.reset({ name: r.name, description: r.description ?? '', isActive: r.isActive }); setDialogOpen(true); };
+  const openEdit = (r: Route) => { setEditing(r); form.reset({ targetTenantId: r.tenant?.id ?? '', name: r.name, description: r.description ?? '', isActive: r.isActive }); setDialogOpen(true); };
 
   const saveMutation = useMutation({
-    mutationFn: (v: Form) => editing ? updateRoute(editing.id, { name: v.name, description: v.description || null, isActive: v.isActive }) : createRoute({ name: v.name, description: v.description || null, isActive: v.isActive, startPoint: { lat: 0, lng: 0 }, endPoint: { lat: 0, lng: 0 }, busStops: [{ name: 'TBD', location: { lat: 0, lng: 0 }, pickupOrder: 1, scheduledPickupTime: '07:00', scheduledDropoffTime: '16:00' }] }),
+    mutationFn: (v: Form) => editing
+      ? updateRoute(editing.id, { name: v.name, description: v.description || null, isActive: v.isActive, targetTenantId: v.targetTenantId || undefined })
+      : createRoute({ name: v.name, description: v.description || null, isActive: v.isActive, startPoint: { lat: 0, lng: 0 }, endPoint: { lat: 0, lng: 0 }, busStops: [{ name: 'TBD', location: { lat: 0, lng: 0 }, pickupOrder: 1, scheduledPickupTime: '07:00', scheduledDropoffTime: '16:00' }], targetTenantId: v.targetTenantId || undefined }),
     onSuccess: () => { toast.success(editing ? 'Route updated.' : 'Route created. Use the map editor to add exact coordinates and stops.'); setDialogOpen(false); qc.invalidateQueries({ queryKey: ['routes'] }); },
     onError: () => toast.error('Could not save route.'),
   });
@@ -122,6 +126,7 @@ export function RoutesPage() {
 
       <FormModal open={dialogOpen} onClose={() => setDialogOpen(false)} title={editing ? `Edit route — ${editing.name}` : 'Add route'} subtitle="Route name and description. Bus stops and geo-coordinates are managed via the map editor." size="md" onSubmit={form.handleSubmit((v) => saveMutation.mutate(v))} submitLabel={editing ? 'Save changes' : 'Create route'} submitting={saveMutation.isPending}>
         <div className="space-y-4">
+          {isSuperAdmin && <TenantSelectorField value={form.watch('targetTenantId') ?? ''} onChange={(v) => form.setValue('targetTenantId', v)} error={form.formState.errors.targetTenantId?.message} hint={editing ? 'Change to reassign this route to a different school' : undefined} />}
           <FormField label="Route name" required error={form.formState.errors.name?.message}><Input placeholder="Morning Route A" {...form.register('name')} /></FormField>
           <FormField label="Description" error={form.formState.errors.description?.message}><Input placeholder="Covers Zone 3 estates…" {...form.register('description')} /></FormField>
           <label className="flex items-center gap-2 text-sm cursor-pointer select-none"><input type="checkbox" className="accent-primary" {...form.register('isActive')} /><span>Active — students will be assigned to this route</span></label>

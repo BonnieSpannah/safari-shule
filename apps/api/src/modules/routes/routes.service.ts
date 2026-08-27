@@ -37,8 +37,8 @@ export class RoutesService {
     return route;
   }
 
-  async createRoute(input: RouteInput) {
-    const tenantId = requireTenantId();
+  async createRoute(input: RouteInput & { targetTenantId?: string }) {
+    const tenantId = input.targetTenantId ?? requireTenantId();
     const routeId = randomUUID();
     await this.prisma.$transaction(async (tx: Parameters<Parameters<PrismaClient['$transaction']>[0]>[0]) => {
       await tx.$executeRaw`
@@ -109,6 +109,18 @@ export class RoutesService {
       WHERE id = ${geofenceId}::uuid;
     `;
     return rows[0]?.inside ?? false;
+  }
+
+  async patchRoute(id: string, patch: { name?: string; description?: string | null; isActive?: boolean; targetTenantId?: string }) {
+    return this.prisma.route.update({
+      where: { id },
+      data: {
+        ...(patch.targetTenantId ? { tenantId: patch.targetTenantId } : {}),
+        ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.description !== undefined ? { description: patch.description } : {}),
+        ...(patch.isActive !== undefined ? { isActive: patch.isActive } : {}),
+      },
+    });
   }
 
   assignStudentToRoute(input: StudentRouteAssignmentInput) {

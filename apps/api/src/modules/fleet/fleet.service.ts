@@ -57,20 +57,22 @@ export class FleetService {
     });
   }
 
-  updateVehicle(id: string, patch: Partial<VehicleInput>) {
+  updateVehicle(id: string, patch: Partial<VehicleInput> & { targetTenantId?: string }) {
+    const { targetTenantId, ...fields } = patch;
     return this.prisma.vehicle.update({
       where: { id },
       data: {
-        ...(patch.registration ? { registration: patch.registration } : {}),
-        ...(patch.make ? { make: patch.make } : {}),
-        ...(patch.model ? { model: patch.model } : {}),
-        ...(patch.year !== undefined ? { year: patch.year } : {}),
-        ...(patch.capacity !== undefined ? { capacity: patch.capacity } : {}),
-        ...(patch.ownership ? { ownership: patch.ownership as any } : {}),
-        ...(patch.status ? { status: patch.status as any } : {}),
-        ...(patch.assignedDriverId !== undefined ? { assignedDriverId: patch.assignedDriverId } : {}),
-        ...(patch.assignedAssistantId !== undefined ? { assignedAssistantId: patch.assignedAssistantId } : {}),
-        ...(patch.odometerKm !== undefined ? { odometerKm: patch.odometerKm } : {}),
+        ...(targetTenantId ? { tenantId: targetTenantId } : {}),
+        ...(fields.registration ? { registration: fields.registration } : {}),
+        ...(fields.make ? { make: fields.make } : {}),
+        ...(fields.model ? { model: fields.model } : {}),
+        ...(fields.year !== undefined ? { year: fields.year } : {}),
+        ...(fields.capacity !== undefined ? { capacity: fields.capacity } : {}),
+        ...(fields.ownership ? { ownership: fields.ownership as any } : {}),
+        ...(fields.status ? { status: fields.status as any } : {}),
+        ...(fields.assignedDriverId !== undefined ? { assignedDriverId: fields.assignedDriverId } : {}),
+        ...(fields.assignedAssistantId !== undefined ? { assignedAssistantId: fields.assignedAssistantId } : {}),
+        ...(fields.odometerKm !== undefined ? { odometerKm: fields.odometerKm } : {}),
       },
     });
   }

@@ -33,12 +33,12 @@ export async function getVehicle(id: string): Promise<Vehicle> {
   return data;
 }
 
-export async function createVehicle(input: VehicleInput): Promise<Vehicle> {
+export async function createVehicle(input: VehicleInput & { targetTenantId?: string }): Promise<Vehicle> {
   const { data } = await api.post<Vehicle>('/v1/vehicles', input);
   return data;
 }
 
-export async function updateVehicle(id: string, input: Partial<VehicleInput>): Promise<Vehicle> {
+export async function updateVehicle(id: string, input: Partial<VehicleInput> & { targetTenantId?: string }): Promise<Vehicle> {
   const { data } = await api.patch<Vehicle>(`/v1/vehicles/${id}`, input);
   return data;
 }

@@ -41,12 +41,12 @@ export async function getRoute(id: string): Promise<Route> {
   return data;
 }
 
-export async function createRoute(input: CreateRouteInput): Promise<Route> {
+export async function createRoute(input: CreateRouteInput & { targetTenantId?: string }): Promise<Route> {
   const { data } = await api.post<Route>('/v1/routes', input);
   return data;
 }
 
-export async function updateRoute(id: string, input: Partial<Pick<CreateRouteInput, 'name' | 'description' | 'isActive'>>): Promise<Route> {
+export async function updateRoute(id: string, input: Partial<Pick<CreateRouteInput, 'name' | 'description' | 'isActive'>> & { targetTenantId?: string }): Promise<Route> {
   const { data } = await api.patch<Route>(`/v1/routes/${id}`, input);
   return data;
 }

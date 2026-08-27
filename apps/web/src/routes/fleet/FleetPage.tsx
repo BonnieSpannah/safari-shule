@@ -37,7 +37,7 @@ function VehicleStatusBadge({ status }: { status: string }) {
 }
 
 const schema = z.object({
-  targetTenantId: z.string().uuid().optional(),
+  targetTenantId: z.string().uuid().or(z.literal('')).optional(),
   registration: z.string().trim().regex(/^K[A-Z]{2}\s?\d{3}[A-Z]$/i, 'Must be a Kenyan plate (e.g. KCB 123X)'),
   make: z.string().min(1, 'Enter make'), model: z.string().min(1, 'Enter model'),
   year: z.coerce.number().int().min(1980).max(2100),
@@ -61,10 +61,12 @@ export function FleetPage() {
   const form = useForm<Form>({ resolver: zodResolver(schema), mode: 'onChange' });
 
   const openCreate = () => { setEditing(null); form.reset({ status: 'active', ownership: 'school', odometerKm: 0 }); setDialogOpen(true); };
-  const openEdit = (v: Vehicle) => { setEditing(v); form.reset({ registration: v.registration, make: v.make, model: v.model, year: v.year, capacity: v.capacity, ownership: v.ownership, status: v.status, odometerKm: v.odometerKm }); setDialogOpen(true); };
+  const openEdit = (v: Vehicle) => { setEditing(v); form.reset({ targetTenantId: v.tenant?.id ?? '', registration: v.registration, make: v.make, model: v.model, year: v.year, capacity: v.capacity, ownership: v.ownership, status: v.status, odometerKm: v.odometerKm }); setDialogOpen(true); };
 
   const saveMutation = useMutation({
-    mutationFn: (v: Form) => editing ? updateVehicle(editing.id, v) : createVehicle(v),
+    mutationFn: (v: Form) => editing
+      ? updateVehicle(editing.id, { registration: v.registration, make: v.make, model: v.model, year: v.year, capacity: v.capacity, ownership: v.ownership, status: v.status, odometerKm: v.odometerKm, targetTenantId: v.targetTenantId || undefined })
+      : createVehicle({ registration: v.registration, make: v.make, model: v.model, year: v.year, capacity: v.capacity, ownership: v.ownership, status: v.status, odometerKm: v.odometerKm, targetTenantId: v.targetTenantId || undefined }),
     onSuccess: () => { toast.success(editing ? 'Vehicle updated.' : 'Vehicle registered.'); setDialogOpen(false); qc.invalidateQueries({ queryKey: ['vehicles'] }); },
     onError: () => toast.error('Could not save vehicle.'),
   });
@@ -113,7 +115,7 @@ export function FleetPage() {
 
       <FormModal open={dialogOpen} onClose={() => setDialogOpen(false)} title={editing ? `Edit — ${editing.registration}` : 'Register vehicle'} subtitle="Vehicle registration and operational details" onSubmit={form.handleSubmit((v) => saveMutation.mutate(v))} submitLabel={editing ? 'Save changes' : 'Register vehicle'} submitting={saveMutation.isPending}>
         <div className="grid gap-4 sm:grid-cols-2">
-          {!editing && <div className="sm:col-span-2"><TenantSelectorField value={form.watch('targetTenantId') ?? ''} onChange={(v) => form.setValue('targetTenantId', v)} error={form.formState.errors.targetTenantId?.message} /></div>}
+          {isSuperAdmin && <div className="sm:col-span-2"><TenantSelectorField value={form.watch('targetTenantId') ?? ''} onChange={(v) => form.setValue('targetTenantId', v)} error={form.formState.errors.targetTenantId?.message} hint={editing ? 'Change to reassign this vehicle to a different school' : undefined} /></div>}
           <FormField label="Registration plate" required error={form.formState.errors.registration?.message}><Input placeholder="KCB 123X" {...form.register('registration')} /></FormField>
           <FormField label="Make" required error={form.formState.errors.make?.message}><Input placeholder="Toyota" {...form.register('make')} /></FormField>
           <FormField label="Model" required error={form.formState.errors.model?.message}><Input placeholder="Hiace" {...form.register('model')} /></FormField>
