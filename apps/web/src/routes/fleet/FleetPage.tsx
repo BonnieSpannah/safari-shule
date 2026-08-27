@@ -14,6 +14,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { FormModal } from '@/components/ui/form-modal';
 import { FormField } from '@/components/ui/form-field';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
 import { TenantSelectorField } from '@/components/ui/tenant-selector-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -62,7 +63,7 @@ export function FleetPage() {
   const openEdit = (v: Vehicle) => { setEditing(v); form.reset({ registration: v.registration, make: v.make, model: v.model, year: v.year, capacity: v.capacity, ownership: v.ownership, status: v.status, odometerKm: v.odometerKm }); setDialogOpen(true); };
 
   const saveMutation = useMutation({
-    mutationFn: (v: Form) => editing ? updateVehicle(editing.id, v) : createVehicle({ ...v, targetTenantId: v.targetTenantId } as any),
+    mutationFn: (v: Form) => editing ? updateVehicle(editing.id, v) : createVehicle(v),
     onSuccess: () => { toast.success(editing ? 'Vehicle updated.' : 'Vehicle registered.'); setDialogOpen(false); qc.invalidateQueries({ queryKey: ['vehicles'] }); },
     onError: () => toast.error('Could not save vehicle.'),
   });
@@ -87,7 +88,16 @@ export function FleetPage() {
     <div className="space-y-5">
       <PageHeader title="Fleet" description="Vehicles, registrations and operational status." actions={canCreate ? <Button onClick={openCreate} size="sm" className="gap-1.5 bg-green-600 hover:bg-green-700"><Plus className="h-4 w-4" />Add vehicle</Button> : undefined} />
 
-      <DataTable
+      {query.error && (
+        <ErrorState
+          title="Failed to load vehicles"
+          error={query.error}
+          onRetry={() => query.refetch()}
+        />
+      )}
+
+      {!query.error && (
+        <DataTable
         title="All vehicles"
         description={total > 0 ? `${total} vehicle${total !== 1 ? 's' : ''}` : undefined}
         search={<div className="relative w-full"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Search plate, make or model…" className="pl-8 h-9 text-sm" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>}
@@ -98,6 +108,7 @@ export function FleetPage() {
         columns={columns} rows={vehicles} rowKey={(v) => v.id} loading={query.isLoading} skeletonRows={PAGE_SIZE}
         empty={<EmptyState icon={<Bus className="h-6 w-6" />} title="No vehicles found" description={canCreate ? 'Register the first vehicle above.' : undefined} />}
       />
+      )}
 
       <FormModal open={dialogOpen} onClose={() => setDialogOpen(false)} title={editing ? `Edit — ${editing.registration}` : 'Register vehicle'} subtitle="Vehicle registration and operational details" onSubmit={form.handleSubmit((v) => saveMutation.mutate(v))} submitLabel={editing ? 'Save changes' : 'Register vehicle'} submitting={saveMutation.isPending}>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -108,8 +119,8 @@ export function FleetPage() {
           <FormField label="Year" required error={form.formState.errors.year?.message}><Input type="number" placeholder="2020" {...form.register('year')} /></FormField>
           <FormField label="Seats (capacity)" required error={form.formState.errors.capacity?.message}><Input type="number" placeholder="14" {...form.register('capacity')} /></FormField>
           <FormField label="Odometer (km)" error={form.formState.errors.odometerKm?.message}><Input type="number" placeholder="0" {...form.register('odometerKm')} /></FormField>
-          <FormField label="Ownership" required error={form.formState.errors.ownership?.message}><SearchableSelect options={OWNERSHIP_OPTS} value={form.watch('ownership') ?? ''} onChange={(v) => form.setValue('ownership', v as any)} placeholder="Select ownership" /></FormField>
-          <FormField label="Status" required error={form.formState.errors.status?.message}><SearchableSelect options={STATUS_OPTS} value={form.watch('status') ?? ''} onChange={(v) => form.setValue('status', v as any)} placeholder="Select status" /></FormField>
+          <FormField label="Ownership" required error={form.formState.errors.ownership?.message}><SearchableSelect options={OWNERSHIP_OPTS} value={form.watch('ownership') ?? ''} onChange={(v) => form.setValue('ownership', v as 'school' | 'hired')} placeholder="Select ownership" /></FormField>
+          <FormField label="Status" required error={form.formState.errors.status?.message}><SearchableSelect options={STATUS_OPTS} value={form.watch('status') ?? ''} onChange={(v) => form.setValue('status', v as 'active' | 'maintenance' | 'retired')} placeholder="Select status" /></FormField>
         </div>
       </FormModal>
 
