@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
-import { AlertTriangle, Check, CheckCheck, Search } from 'lucide-react';
+import { AlertTriangle, Check, CheckCheck, Search, X } from 'lucide-react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -13,7 +13,7 @@ import { ActionMenu } from '@/components/ui/action-menu';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { Input } from '@/components/ui/input';
-import { SearchableSelect } from '@/components/ui/searchable-select';
+import { FilterDropdown } from '@/components/ui/filter-dropdown';
 import { FormModal } from '@/components/ui/form-modal';
 import { FormField } from '@/components/ui/form-field';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -128,6 +128,7 @@ export function IncidentsPage() {
       key: 'kind',
       header: 'Incident',
       width: 'w-full',
+      sortable: true,
       exportValue: (i) => `${i.kind} (${i.severity})`,
       render: (i) => (
         <div>
@@ -145,12 +146,14 @@ export function IncidentsPage() {
     {
       key: 'status',
       header: 'Status',
+      sortable: true,
       exportValue: (i) => i.status,
       render: (i) => <StatusBadge status={i.status} />,
     },
     {
       key: 'occurredAt',
       header: 'Occurred',
+      sortable: true,
       exportValue: (i) => i.occurredAt,
       render: (i) => (
         <span className="whitespace-nowrap text-xs text-muted-foreground">
@@ -224,18 +227,7 @@ export function IncidentsPage() {
             />
           </div>
         }
-        filters={
-          <SearchableSelect
-            options={STATUS_OPTIONS}
-            value={statusFilter}
-            onChange={(v) => {
-              setStatusFilter(v);
-              setPage(1);
-            }}
-            placeholder="Status"
-            className="h-9 min-w-[140px]"
-          />
-        }
+        filters={<div className="flex flex-wrap items-center gap-2"><FilterDropdown label="Status" options={STATUS_OPTIONS.filter(o => o.value)} selected={statusFilter ? [statusFilter] : []} onChange={(v) => { setStatusFilter(v[v.length-1] ?? ''); setPage(1); }} />{statusFilter && <button type="button" onClick={() => { setStatusFilter(''); setPage(1); }} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><X className="h-3 w-3" />Clear</button>}</div>}
         filtersActive={statusFilter !== ''}
         exportFilename="incidents"
         selectable

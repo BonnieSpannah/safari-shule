@@ -298,6 +298,7 @@ export function TenantsPage() {
       key: 'tenant',
       header: 'Tenant / School',
       width: 'w-full',
+      sortable: true,
       exportValue: (tenant) => tenant.name,
       render: (tenant) => (
         <div>
@@ -309,6 +310,7 @@ export function TenantsPage() {
     {
       key: 'plan',
       header: 'Plan',
+      sortable: true,
       exportValue: (tenant) => tenant.planTier,
       render: (tenant) => <PlanBadge tier={tenant.planTier} />,
     },
@@ -326,6 +328,7 @@ export function TenantsPage() {
     {
       key: 'since',
       header: 'Since',
+      sortable: true,
       exportValue: (tenant) => tenant.createdAt,
       render: (tenant) => (
         <div>
@@ -339,6 +342,7 @@ export function TenantsPage() {
     {
       key: 'status',
       header: 'Status',
+      sortable: true,
       exportValue: (tenant) => tenant.status,
       render: (tenant) => <StatusBadge status={tenant.status} />,
     },

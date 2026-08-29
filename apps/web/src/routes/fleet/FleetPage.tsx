@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { Bus, Plus, Search, Pencil, Trash2, Eye } from 'lucide-react';
+import { Bus, Plus, Search, Pencil, Trash2, Eye, X } from 'lucide-react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -19,11 +19,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { TenantSelectorField } from '@/components/ui/tenant-selector-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { FilterDropdown } from '@/components/ui/filter-dropdown';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 
 import { usePermission } from '@/hooks/usePermission';
 import { useDebounce } from '@/hooks/useDebounce';
-import { useTenantFilter, TenantBadge, TenantFilterSelect } from '@/hooks/useTenantFilter';
+import { useTenantFilter, TenantBadge } from '@/hooks/useTenantFilter';
 import { listVehicles, createVehicle, updateVehicle, deleteVehicle, type Vehicle } from '@/lib/api/fleet';
 
 const PAGE_SIZE = 15;
@@ -77,12 +78,12 @@ export function FleetPage() {
   });
 
   const columns: Column<Vehicle>[] = [
-    { key: 'vehicle', header: 'Vehicle', width: 'w-full', exportValue: (v) => `${v.make} ${v.model} (${v.year}) — ${v.registration}`, render: (v) => (<div><p className="font-medium">{v.make} {v.model} <span className="text-muted-foreground font-normal">({v.year})</span></p><p className="text-xs text-muted-foreground font-mono">{v.registration}</p></div>) },
+    { key: 'vehicle', header: 'Vehicle', width: 'w-full', sortable: true, exportValue: (v) => `${v.make} ${v.model} (${v.year}) — ${v.registration}`, render: (v) => (<div><p className="font-medium">{v.make} {v.model} <span className="text-muted-foreground font-normal">({v.year})</span></p><p className="text-xs text-muted-foreground font-mono">{v.registration}</p></div>) },
     { key: 'capacity', header: 'Seats', exportValue: (v) => v.capacity, render: (v) => <span className="whitespace-nowrap text-sm text-muted-foreground">{v.capacity}</span> },
     { key: 'ownership', header: 'Ownership', exportValue: (v) => v.ownership, render: (v) => <span className="capitalize text-sm text-muted-foreground">{v.ownership}</span> },
-    { key: 'status', header: 'Status', exportValue: (v) => v.status, render: (v) => <VehicleStatusBadge status={v.status} /> },
-    { key: 'odometer', header: 'Odometer', exportValue: (v) => `${v.odometerKm} km`, render: (v) => <span className="whitespace-nowrap text-xs text-muted-foreground">{v.odometerKm.toLocaleString()} km</span> },
-    { key: 'added', header: 'Added', exportValue: (v) => format(new Date(v.createdAt), 'd MMM yyyy'), render: (v) => <span className="whitespace-nowrap text-xs text-muted-foreground">{format(new Date(v.createdAt), 'd MMM yyyy')}</span> },
+    { key: 'status', header: 'Status', sortable: true, exportValue: (v) => v.status, render: (v) => <VehicleStatusBadge status={v.status} /> },
+    { key: 'odometer', header: 'Odometer', sortable: true, exportValue: (v) => `${v.odometerKm} km`, render: (v) => <span className="whitespace-nowrap text-xs text-muted-foreground">{v.odometerKm.toLocaleString()} km</span> },
+    { key: 'added', header: 'Added', sortable: true, exportValue: (v) => format(new Date(v.createdAt), 'd MMM yyyy'), render: (v) => <span className="whitespace-nowrap text-xs text-muted-foreground">{format(new Date(v.createdAt), 'd MMM yyyy')}</span> },
     ...(isSuperAdmin ? [{ key: 'tenant', header: 'Tenant', render: (v: Vehicle) => <TenantBadge tenant={v.tenant} /> }] : []),
     { key: 'actions', header: '', align: 'right' as const, width: 'w-10', render: (v) => (<ActionMenu items={[{ label: 'View', icon: <Eye className="h-4 w-4" />, permission: 'vehicles.view', onClick: () => setViewTarget(v) }, { label: 'Edit', icon: <Pencil className="h-4 w-4" />, permission: 'vehicles.edit', onClick: () => openEdit(v) }, { label: 'Remove', icon: <Trash2 className="h-4 w-4" />, permission: 'vehicles.delete', onClick: () => setDeleteTarget(v), variant: 'destructive' }]} />) },
   ];
@@ -104,7 +105,7 @@ export function FleetPage() {
         title="All vehicles"
         description={total > 0 ? `${total} vehicle${total !== 1 ? 's' : ''}` : undefined}
         search={<div className="relative w-full"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Search plate, make or model…" className="pl-8 h-9 text-sm" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>}
-        filters={<><SearchableSelect options={[{ value: '', label: 'All statuses' }, ...STATUS_OPTS]} value={statusFilter} onChange={(v) => { setStatusFilter(v); setPage(1); }} placeholder="Status" className="h-9 min-w-[120px]" /><SearchableSelect options={[{ value: '', label: 'All ownership' }, ...OWNERSHIP_OPTS]} value={ownershipFilter} onChange={(v) => { setOwnershipFilter(v); setPage(1); }} placeholder="Ownership" className="h-9 min-w-[130px]" />{isSuperAdmin && <TenantFilterSelect tenants={tenants} value={tenantFilter} onChange={(v) => { setTenantFilter(v); setPage(1); }} />}</>}
+        filters={<div className="flex flex-wrap items-center gap-2"><FilterDropdown label="Status" options={STATUS_OPTS} selected={statusFilter ? [statusFilter] : []} onChange={(v) => { setStatusFilter(v[v.length-1] ?? ''); setPage(1); }} /><FilterDropdown label="Ownership" options={OWNERSHIP_OPTS} selected={ownershipFilter ? [ownershipFilter] : []} onChange={(v) => { setOwnershipFilter(v[v.length-1] ?? ''); setPage(1); }} />{isSuperAdmin && <FilterDropdown label="Tenant" options={tenants.map((t) => ({ value: t.id, label: t.name }))} selected={tenantFilter ? [tenantFilter] : []} onChange={(v) => { setTenantFilter(v[v.length-1] ?? ''); setPage(1); }} />}{(statusFilter || ownershipFilter || tenantFilter) && <button type="button" onClick={() => { setStatusFilter(''); setOwnershipFilter(''); setTenantFilter(''); setPage(1); }} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><X className="h-3 w-3" />Clear</button>}</div>}
         filtersActive={statusFilter !== '' || ownershipFilter !== '' || tenantFilter !== ''}
         selectable exportFilename="fleet"
         page={page} pageSize={PAGE_SIZE} total={total} onPrev={() => setPage((p) => p - 1)} onNext={() => setPage((p) => p + 1)}

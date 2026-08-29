@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Filter, Download, FileText, Sheet, File, Square, CheckSquare, MinusSquare } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Filter, Download, FileText, Sheet, File, Square, CheckSquare, MinusSquare, ChevronsUpDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from './card';
 import { Button } from './button';
@@ -13,9 +13,9 @@ import { fetchMe } from '@/lib/api/auth';
 export interface Column<T> {
   key: string;
   header: string;
-  width?: string; // 'w-full' → primary; 'w-px' → collapse-to-content; 'w-[Xpx]' → fixed
+  width?: string;
   align?: 'left' | 'center' | 'right';
-  /** Value extractor for CSV/Excel/PDF export. Return undefined to skip column in export. */
+  sortable?: boolean; // client-side sort by exportValue
   exportValue?: (row: T) => string | number | null | undefined;
   render: (row: T) => React.ReactNode;
 }
@@ -433,11 +433,35 @@ export function DataTable<T>({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [internalSelected, setInternalSelected] = useState<Set<string>>(new Set());
 
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (col: Column<T>) => {
+    if (!col.sortable) return;
+    if (sortKey === col.key) setSortDir((d) => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(col.key); setSortDir('asc'); }
+  };
+
   const selectedIds = controlledIds ?? internalSelected;
   const setSelected = useCallback((ids: Set<string>) => {
     setInternalSelected(ids);
     onSelectionChange?.(ids);
   }, [onSelectionChange]);
+
+  // Sort rows client-side when a sortable column is active
+  const sortedRows = (() => {
+    if (!sortKey) return rows;
+    const col = columns.find((c) => c.key === sortKey);
+    if (!col?.exportValue) return rows;
+    return [...rows].sort((a, b) => {
+      const av = col.exportValue!(a) ?? '';
+      const bv = col.exportValue!(b) ?? '';
+      const cmp = typeof av === 'number' && typeof bv === 'number'
+        ? av - bv
+        : String(av).localeCompare(String(bv));
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  })();
 
   const hasPagination = page !== undefined && pageSize !== undefined && total !== undefined && onPrev && onNext;
   const hasHeader = title || search || filters;
@@ -504,8 +528,17 @@ export function DataTable<T>({
                   thWidth(col as Column<unknown>),
                   ALIGN[align],
                   isAct ? 'pl-2 pr-4' : 'pr-4',
-                )}>
-                  {isAct ? '' : col.header}
+                  col.sortable && 'cursor-pointer select-none hover:text-foreground',
+                )}
+                onClick={() => handleSort(col as Column<T>)}>
+                  {isAct ? '' : (
+                    <span className="inline-flex items-center gap-1">
+                      {col.header}
+                      {col.sortable && (sortKey === col.key
+                        ? sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                        : <ChevronsUpDown className="h-3 w-3 opacity-40" />)}
+                    </span>
+                  )}
                 </th>
               );
             })}
@@ -523,7 +556,7 @@ export function DataTable<T>({
               </td>
             </tr>
           ) : (
-            rows.map((row) => {
+            sortedRows.map((row) => {
               const id = rowKey(row);
               const isSelected = selectedIds.has(id);
               return (

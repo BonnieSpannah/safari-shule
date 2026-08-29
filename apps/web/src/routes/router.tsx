@@ -84,6 +84,10 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: 'guardians',
+        element: <Navigate to="/parents" replace />,
+      },
+      {
         path: 'trips',
         element: (
           <PermissionGate anyOf={['trips.view', 'trips.dispatch']}>
@@ -126,7 +130,7 @@ export const router = createBrowserRouter([
       {
         path: 'settings',
         element: (
-          <PermissionGate anyOf={['invitations.send', 'users.view', 'staff.view', 'staff.create']}>
+          <PermissionGate anyOf={['invitations.send', 'users.view', 'staff.view', 'staff.create', 'roles.view']}>
             <SettingsPage />
           </PermissionGate>
         ),

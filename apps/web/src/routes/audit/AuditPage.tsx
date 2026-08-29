@@ -1,18 +1,17 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, formatDistanceToNow } from 'date-fns';
-import { FileText, Search, Building2, Eye } from 'lucide-react';
+import { FileText, Search, Building2, Eye, X } from 'lucide-react';
+import { FilterDropdown } from '@/components/ui/filter-dropdown';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
-import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useDebounce } from '@/hooks/useDebounce';
-import { usePermission } from '@/hooks/usePermission';
-import { useTenantFilter, TenantFilterSelect } from '@/hooks/useTenantFilter';
+import { useTenantFilter } from '@/hooks/useTenantFilter';
 import { listAuditLogs, type AuditEntry } from '@/lib/api/audit';
 
 const PAGE_SIZE = 15;
@@ -229,7 +228,7 @@ export function AuditPage() {
         description={total > 0 ? `${total} entr${total !== 1 ? 'ies' : 'y'}` : undefined}
         search={<div className="relative w-full"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Search actions…" className="pl-8 h-9 text-sm" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>}
 
-        filters={<><SearchableSelect options={[{ value: '', label: 'All entity types' }, ...ENTITY_TYPES.map((t) => ({ value: t, label: t.replace('_', ' ') }))]} value={entityFilter} onChange={(v) => { setEntityFilter(v); setPage(1); }} placeholder="Entity type" className="h-9 min-w-[140px]" />{isSuperAdmin && <TenantFilterSelect tenants={tenants} value={tenantFilter} onChange={(v) => { setTenantFilter(v); setPage(1); }} />}</>}
+        filters={<div className="flex flex-wrap items-center gap-2"><FilterDropdown label="Entity" options={ENTITY_TYPES.map((t) => ({ value: t, label: t.replace('_', ' ') }))} selected={entityFilter ? [entityFilter] : []} onChange={(v) => { setEntityFilter(v[v.length-1] ?? ''); setPage(1); }} />{isSuperAdmin && <FilterDropdown label="Tenant" options={tenants.map((t) => ({ value: t.id, label: t.name }))} selected={tenantFilter ? [tenantFilter] : []} onChange={(v) => { setTenantFilter(v[v.length-1] ?? ''); setPage(1); }} />}{(entityFilter || tenantFilter) && <button type="button" onClick={() => { setEntityFilter(''); setTenantFilter(''); setPage(1); }} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><X className="h-3 w-3" />Clear</button>}</div>}
 
         filtersActive={entityFilter !== "" || tenantFilter !== ""}
         exportFilename="audit-log"

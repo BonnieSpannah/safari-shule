@@ -171,6 +171,11 @@ export class TenantAdminService {
     );
   }
 
+  async syncTenantPermissions(id: string) {
+    await runWithBypass(() => this.rbac.seedTenant(id));
+    return { ok: true };
+  }
+
   async setTenantStatus(id: string, status: 'active' | 'suspended' | 'deactivated' | 'deleted') {
     const now = new Date();
     const current = await runWithBypass(() =>

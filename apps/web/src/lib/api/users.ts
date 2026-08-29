@@ -54,9 +54,19 @@ export interface UpdateUserInput {
   phoneE164?: string | null;
   roleKeys?: string[];
   targetTenantId?: string;
+  sourceTenantId?: string;
 }
 
 export async function updateUser(id: string, input: UpdateUserInput): Promise<User> {
   const { data } = await api.patch<User>(`/v1/users/${id}`, input);
   return data;
 }
+
+export async function suspendUser(id: string): Promise<void> {
+  await api.patch(`/v1/users/${id}/status`, { status: 'suspended' });
+}
+
+export async function lockUser(id: string): Promise<void> {
+  await api.patch(`/v1/users/${id}/status`, { status: 'inactive' });
+}
+

@@ -5,7 +5,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { Users, Plus, Search, Pencil, Trash2, Phone, Mail, Eye, GraduationCap, Link2 } from 'lucide-react';
+import { Users, Plus, Search, Pencil, Trash2, Phone, Mail, Eye, GraduationCap, Link2, X } from 'lucide-react';
+import { FilterDropdown } from '@/components/ui/filter-dropdown';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -19,10 +20,9 @@ import { TenantSelectorField } from '@/components/ui/tenant-selector-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-
 import { usePermission } from '@/hooks/usePermission';
 import { useDebounce } from '@/hooks/useDebounce';
-import { useTenantFilter, TenantBadge, TenantFilterSelect } from '@/hooks/useTenantFilter';
+import { useTenantFilter, TenantBadge } from '@/hooks/useTenantFilter';
 import { listParents, getParent, createParent, updateParent, deleteParent, linkStudentToParent, type Parent } from '@/lib/api/parents';
 import { listStudents } from '@/lib/api/students';
 
@@ -73,11 +73,11 @@ export function ParentsPage() {
   });
 
   const columns: Column<Parent>[] = [
-    { key: 'guardian', header: 'Guardian', width: 'w-full', exportValue: (p) => p.legalName, render: (p) => (<div><p className="font-medium">{p.legalName}</p><div className="flex items-center gap-1 text-xs text-muted-foreground"><Phone className="h-3 w-3" />{p.phoneE164}{p.email && <><span className="mx-1">·</span><Mail className="h-3 w-3" />{p.email}</>}</div></div>) },
+    { key: 'guardian', header: 'Guardian', width: 'w-full', sortable: true, exportValue: (p) => p.legalName, render: (p) => (<div><p className="font-medium">{p.legalName}</p><div className="flex items-center gap-1 text-xs text-muted-foreground"><Phone className="h-3 w-3" />{p.phoneE164}{p.email && <><span className="mx-1">·</span><Mail className="h-3 w-3" />{p.email}</>}</div></div>) },
     { key: 'phone', header: 'Phone', exportValue: (p) => p.phoneE164, render: (p) => <span className="whitespace-nowrap text-sm text-muted-foreground">{p.phoneE164}</span> },
     { key: 'gender', header: 'Gender', exportValue: (p) => p.gender, render: (p) => <span className="capitalize text-sm text-muted-foreground">{p.gender}</span> },
     { key: 'occupation', header: 'Occupation', exportValue: (p) => p.occupation ?? '', render: (p) => <span className="text-sm text-muted-foreground">{p.occupation ?? '—'}</span> },
-    { key: 'added', header: 'Added', exportValue: (p) => format(new Date(p.createdAt), 'd MMM yyyy'), render: (p) => <span className="whitespace-nowrap text-xs text-muted-foreground">{format(new Date(p.createdAt), 'd MMM yyyy')}</span> },
+    { key: 'added', header: 'Added', sortable: true, exportValue: (p) => format(new Date(p.createdAt), 'd MMM yyyy'), render: (p) => <span className="whitespace-nowrap text-xs text-muted-foreground">{format(new Date(p.createdAt), 'd MMM yyyy')}</span> },
     ...(isSuperAdmin ? [{ key: 'tenant', header: 'Tenant', render: (p: Parent) => <TenantBadge tenant={p.tenant} /> }] : []),
     { key: 'actions', header: '', align: 'right' as const, width: 'w-10', render: (p) => (<ActionMenu items={[{ label: 'View', icon: <Eye className="h-4 w-4" />, permission: 'parents.view', onClick: () => setViewTarget(p) }, { label: 'Edit', icon: <Pencil className="h-4 w-4" />, permission: 'parents.edit', onClick: () => openEdit(p) }, { label: 'Remove', icon: <Trash2 className="h-4 w-4" />, permission: 'parents.delete', onClick: () => setDeleteTarget(p), variant: 'destructive' }]} />) },
   ];
@@ -91,7 +91,7 @@ export function ParentsPage() {
         description={total > 0 ? `${total} guardian${total !== 1 ? 's' : ''}` : undefined}
         search={<div className="relative w-full"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Search name or phone…" className="pl-8 h-9 text-sm" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>}
 
-        filters={isSuperAdmin ? <TenantFilterSelect tenants={tenants} value={tenantFilter} onChange={(v) => { setTenantFilter(v); setPage(1); }} /> : undefined}
+        filters={isSuperAdmin ? <div className="flex flex-wrap items-center gap-2"><FilterDropdown label="Tenant" options={tenants.map((t) => ({ value: t.id, label: t.name }))} selected={tenantFilter ? [tenantFilter] : []} onChange={(v) => { setTenantFilter(v[v.length-1] ?? ''); setPage(1); }} />{tenantFilter && <button type="button" onClick={() => { setTenantFilter(''); setPage(1); }} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><X className="h-3 w-3" />Clear</button>}</div> : undefined}
 
         filtersActive={tenantFilter !== ""}
         exportFilename="parents"

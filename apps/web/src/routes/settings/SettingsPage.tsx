@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
-import { UserPlus, Mail, Phone, UserX, UserCheck, Search, Pencil } from 'lucide-react';
+import { UserPlus, Mail, Phone, UserX, UserCheck, Search, Pencil, Lock, Unlock, X } from 'lucide-react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,11 +23,12 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { TenantSelectorField } from '@/components/ui/tenant-selector-field';
 
+import { FilterDropdown } from '@/components/ui/filter-dropdown';
 import { usePermission, useAnyPermission } from '@/hooks/usePermission';
 import { useDebounce } from '@/hooks/useDebounce';
-import { useTenantFilter, TenantBadge, TenantFilterSelect } from '@/hooks/useTenantFilter';
+import { useTenantFilter, TenantBadge } from '@/hooks/useTenantFilter';
 import { humanizeRole } from '@/lib/roles';
-import { listUsers, inviteUser, deactivateUser, activateUser, updateUser, type User } from '@/lib/api/users';
+import { listUsers, inviteUser, deactivateUser, activateUser, suspendUser, lockUser, updateUser, type User } from '@/lib/api/users';
 import { listStaff, createStaffMember, updateStaffMember, deleteStaffMember, type StaffMember } from '@/lib/api/staff';
 import type { StaffInput } from '@safari-shule/shared-types';
 
@@ -64,7 +65,8 @@ const inviteSchema = z.object({
 type InviteForm = z.infer<typeof inviteSchema>;
 
 const editUserSchema = z.object({
-  targetTenantId: z.string().uuid().or(z.literal('')).optional(),
+  sourceTenantId: z.string().uuid().or(z.literal('')).optional(),  // current tenant — sent for lookup
+  targetTenantId: z.string().uuid().or(z.literal('')).optional(),  // new tenant — triggers move
   fullName: z.string().min(2, 'Enter full name'),
   phoneE164: z.string().trim().regex(/^\+254[17]\d{8}$/, 'Must be a valid Kenyan mobile number').or(z.literal('')).optional(),
   roleKeys: z.array(z.string()).min(1, 'Select at least one role'),
@@ -94,6 +96,41 @@ function RolePill({ roleKey }: { roleKey: string }) {
   );
 }
 
+function SectionHero({
+  eyebrow,
+  title,
+  description,
+  stats,
+  action,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  stats: Array<{ label: string; value: string }>;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-surface-1 via-surface-1 to-surface-2 px-5 py-4 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">{eyebrow}</p>
+          <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+          <p className="max-w-2xl text-sm text-muted-foreground">{description}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {stats.map((stat) => (
+            <span key={stat.label} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/80 px-3 py-1 text-xs text-muted-foreground shadow-sm">
+              <span className="font-semibold text-foreground">{stat.value}</span>
+              <span>{stat.label}</span>
+            </span>
+          ))}
+          {action}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Users tab ────────────────────────────────────────────────────────────────
 function UsersTab() {
   const canManage = usePermission('invitations.send');
@@ -102,16 +139,18 @@ function UsersTab() {
 
   const [search, setSearch] = useState('');
   const [tenantFilter, setTenantFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
   const [page, setPage] = useState(1);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
-  const [confirmUser, setConfirmUser] = useState<{ user: User; action: 'deactivate' | 'activate' } | null>(null);
+  const [confirmUser, setConfirmUser] = useState<{ user: User; action: 'deactivate' | 'activate' | 'suspend' | 'lock' } | null>(null);
 
   const dSearch = useDebounce(search, 300);
 
   const query = useQuery({
-    queryKey: ['users', dSearch, tenantFilter, page],
-    queryFn: () => listUsers({ q: dSearch || undefined, tenantId: tenantFilter || undefined, page, pageSize: PAGE_SIZE }),
+    queryKey: ['users', dSearch, tenantFilter, statusFilter, roleFilter, page],
+    queryFn: () => listUsers({ q: dSearch || undefined, tenantId: tenantFilter || undefined, status: statusFilter || undefined, roleKey: roleFilter || undefined, page, pageSize: PAGE_SIZE }),
     placeholderData: (prev) => prev,
   });
 
@@ -124,6 +163,7 @@ function UsersTab() {
   const openEdit = (u: User) => {
     setEditUser(u);
     editForm.reset({
+      sourceTenantId: u.tenant?.id ?? '',
       targetTenantId: u.tenant?.id ?? '',
       fullName: u.fullName ?? '',
       phoneE164: u.phoneE164 ?? '',
@@ -136,6 +176,8 @@ function UsersTab() {
       fullName: v.fullName,
       phoneE164: v.phoneE164 || null,
       roleKeys: v.roleKeys,
+      sourceTenantId: v.sourceTenantId || undefined,
+      targetTenantId: v.targetTenantId !== v.sourceTenantId ? (v.targetTenantId || undefined) : undefined,
     }),
     onSuccess: () => {
       toast.success('User updated.');
@@ -157,10 +199,15 @@ function UsersTab() {
   });
 
   const statusMutation = useMutation({
-    mutationFn: ({ user, action }: { user: User; action: 'deactivate' | 'activate' }) =>
-      action === 'deactivate' ? deactivateUser(user.id) : activateUser(user.id),
+    mutationFn: ({ user, action }: { user: User; action: 'deactivate' | 'activate' | 'suspend' | 'lock' }) => {
+      if (action === 'deactivate') return deactivateUser(user.id);
+      if (action === 'activate') return activateUser(user.id);
+      if (action === 'suspend') return suspendUser(user.id);
+      return lockUser(user.id);
+    },
     onSuccess: (_, { action }) => {
-      toast.success(action === 'deactivate' ? 'User deactivated.' : 'User activated.');
+      const labels: Record<string, string> = { deactivate: 'deactivated', activate: 'activated', suspend: 'suspended', lock: 'locked' };
+      toast.success(`User ${labels[action] ?? 'updated'}.`);
       setConfirmUser(null);
       qc.invalidateQueries({ queryKey: ['users'] });
     },
@@ -172,6 +219,7 @@ function UsersTab() {
       key: 'name',
       header: 'Name',
       width: 'w-full',
+      sortable: true,
       exportValue: (u) => u.fullName || '—',
       render: (u) => (
         <div>
@@ -203,6 +251,7 @@ function UsersTab() {
       key: 'status',
       header: 'Status',
       width: 'w-28',
+      sortable: true,
       exportValue: (u) => u.status,
       render: (u) => <StatusBadge status={u.status} />,
     },
@@ -210,6 +259,7 @@ function UsersTab() {
       key: 'lastLogin',
       header: 'Last sign-in',
       width: 'w-36',
+      sortable: true,
       exportValue: (u) => u.lastLoginAt ?? '',
       render: (u) => (
         <span className="text-xs text-muted-foreground">
@@ -221,6 +271,7 @@ function UsersTab() {
       key: 'joined',
       header: 'Joined',
       width: 'w-28',
+      sortable: true,
       exportValue: (u) => format(new Date(u.createdAt), 'd MMM yyyy'),
       render: (u) => <span className="text-xs text-muted-foreground">{format(new Date(u.createdAt), 'd MMM yyyy')}</span>,
     },
@@ -233,9 +284,15 @@ function UsersTab() {
       render: (u) => (
         <ActionMenu items={[
           { label: 'Edit', icon: <Pencil className="h-4 w-4" />, permission: 'users.update', onClick: () => openEdit(u) },
-          u.status === 'active'
-            ? { label: 'Deactivate', icon: <UserX className="h-4 w-4" />, permission: 'users.deactivate', onClick: () => setConfirmUser({ user: u, action: 'deactivate' }), variant: 'destructive' }
-            : { label: 'Activate', icon: <UserCheck className="h-4 w-4" />, permission: 'users.deactivate', onClick: () => setConfirmUser({ user: u, action: 'activate' }) },
+          ...(u.status === 'active' ? [
+            { label: 'Suspend', icon: <Lock className="h-4 w-4" />, permission: 'users.deactivate', onClick: () => setConfirmUser({ user: u, action: 'suspend' }), variant: 'destructive' as const },
+            { label: 'Deactivate', icon: <UserX className="h-4 w-4" />, permission: 'users.deactivate', onClick: () => setConfirmUser({ user: u, action: 'deactivate' }), variant: 'destructive' as const },
+          ] : [
+            { label: 'Activate', icon: <UserCheck className="h-4 w-4" />, permission: 'users.deactivate', onClick: () => setConfirmUser({ user: u, action: 'activate' }) },
+          ]),
+          ...(['inactive', 'suspended'].includes(u.status) ? [
+            { label: 'Lock account', icon: <Unlock className="h-4 w-4" />, permission: 'users.lock', onClick: () => setConfirmUser({ user: u, action: 'lock' }), variant: 'destructive' as const },
+          ] : []),
         ]} />
       ),
     },
@@ -243,13 +300,21 @@ function UsersTab() {
 
   return (
     <div className="space-y-4">
-      {canManage && (
-        <div className="flex justify-end">
+      <SectionHero
+        eyebrow="Access management"
+        title="System users"
+        description="Invite users, tune role assignments, and keep account access aligned with the active school."
+        stats={[
+          { label: 'accounts', value: String(total) },
+          { label: 'scope', value: isSuperAdmin ? 'all schools' : 'current school' },
+          { label: 'mode', value: canManage ? 'editable' : 'read only' },
+        ]}
+        action={canManage ? (
           <Button onClick={() => setInviteOpen(true)} className="gap-1.5 bg-green-600 hover:bg-green-700">
             <UserPlus className="h-4 w-4" /> Invite user
           </Button>
-        </div>
-      )}
+        ) : undefined}
+      />
 
       {query.error && (
         <ErrorState
@@ -264,8 +329,35 @@ function UsersTab() {
         title="System users"
         description={total > 0 ? `${total} user${total !== 1 ? 's' : ''}` : undefined}
         search={<div className="relative w-full"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Search users…" className="pl-8 h-9 text-sm" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>}
-        filters={isSuperAdmin ? <TenantFilterSelect tenants={tenants} value={tenantFilter} onChange={(v) => { setTenantFilter(v); setPage(1); }} /> : undefined}
-        filtersActive={tenantFilter !== ''}
+        filters={
+          <div className="flex flex-wrap items-center gap-2">
+            <FilterDropdown
+              label="Status"
+              options={[
+                { value: 'active', label: 'Active' },
+                { value: 'pending', label: 'Pending' },
+                { value: 'suspended', label: 'Suspended' },
+                { value: 'inactive', label: 'Inactive' },
+              ]}
+              selected={statusFilter ? [statusFilter] : []}
+              onChange={(v) => { setStatusFilter(v[v.length - 1] ?? ''); setPage(1); }}
+            />
+            <FilterDropdown
+              label="Role"
+              options={STAFF_ROLES}
+              selected={roleFilter ? [roleFilter] : []}
+              onChange={(v) => { setRoleFilter(v[v.length - 1] ?? ''); setPage(1); }}
+            />
+            {isSuperAdmin && <FilterDropdown label="Tenant" options={tenants.map((t) => ({ value: t.id, label: t.name }))} selected={tenantFilter ? [tenantFilter] : []} onChange={(v) => { setTenantFilter(v[v.length - 1] ?? ''); setPage(1); }} />}
+            {(statusFilter || roleFilter || tenantFilter) && (
+              <button type="button" onClick={() => { setStatusFilter(''); setRoleFilter(''); setTenantFilter(''); setPage(1); }}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                <X className="h-3 w-3" /> Clear
+              </button>
+            )}
+          </div>
+        }
+        filtersActive={!!statusFilter || !!roleFilter || !!tenantFilter}
         exportFilename="settings-users"
         selectable
         page={page}
@@ -351,7 +443,9 @@ function UsersTab() {
               <TenantSelectorField
                 value={editForm.watch('targetTenantId') ?? ''}
                 onChange={(v) => editForm.setValue('targetTenantId', v)}
-                hint="User belongs to this school"
+                hint={editForm.watch('targetTenantId') !== editForm.watch('sourceTenantId')
+                  ? '⚠ Changing school will remove all current role assignments'
+                  : 'Change to move this user to a different school'}
               />
             )}
             <div className="grid gap-4 sm:grid-cols-2">
@@ -390,21 +484,29 @@ function UsersTab() {
         </DialogContent>
       </Dialog>
 
-      {/* Confirm deactivate/activate */}
-      {confirmUser && (
-        <ConfirmDialog
-          open
-          onOpenChange={(o) => { if (!o) setConfirmUser(null); }}
-          title={confirmUser.action === 'deactivate' ? 'Deactivate user?' : 'Activate user?'}
-          description={confirmUser.action === 'deactivate'
-            ? `${confirmUser.user.fullName} will lose access immediately.`
-            : `${confirmUser.user.fullName} will regain access.`}
-          confirmLabel={confirmUser.action === 'deactivate' ? 'Deactivate' : 'Activate'}
-          destructive={confirmUser.action === 'deactivate'}
-          onConfirm={() => statusMutation.mutate(confirmUser)}
-          pending={statusMutation.isPending}
-        />
-      )}
+      {/* Confirm status change */}
+      {confirmUser && (() => {
+        const { action, user } = confirmUser;
+        const configs = {
+          deactivate: { title: 'Deactivate user?', desc: `${user.fullName} will lose access immediately.`, label: 'Deactivate', destructive: true },
+          activate:   { title: 'Activate user?', desc: `${user.fullName} will regain access.`, label: 'Activate', destructive: false },
+          suspend:    { title: 'Suspend user?', desc: `${user.fullName} will be temporarily blocked from logging in.`, label: 'Suspend', destructive: true },
+          lock:       { title: 'Lock account?', desc: `${user.fullName}'s account will be locked until an admin unlocks it.`, label: 'Lock', destructive: true },
+        } as const;
+        const cfg = configs[action as keyof typeof configs];
+        return cfg ? (
+          <ConfirmDialog
+            open
+            onOpenChange={(o) => { if (!o) setConfirmUser(null); }}
+            title={cfg.title}
+            description={cfg.desc}
+            confirmLabel={cfg.label}
+            destructive={cfg.destructive}
+            onConfirm={() => statusMutation.mutate(confirmUser)}
+            pending={statusMutation.isPending}
+          />
+        ) : null;
+      })()}
     </div>
   );
 }
@@ -534,6 +636,7 @@ function StaffTab() {
       key: 'name',
       header: 'Name',
       width: 'w-full',
+      sortable: true,
       exportValue: (s) => s.legalName,
       render: (s) => (
         <div>
@@ -542,7 +645,7 @@ function StaffTab() {
         </div>
       ),
     },
-    { key: 'position', header: 'Position', width: 'w-32', exportValue: (s) => s.position, render: (s) => <span className="text-sm text-muted-foreground">{s.position}</span> },
+    { key: 'position', header: 'Position', width: 'w-32', sortable: true, exportValue: (s) => s.position, render: (s) => <span className="text-sm text-muted-foreground">{s.position}</span> },
     {
       key: 'contact',
       header: 'Contact',
@@ -570,7 +673,7 @@ function StaffTab() {
             : <span className="text-xs text-muted-foreground">No email</span>
       ),
     },
-    { key: 'joined', header: 'Added', width: 'w-28', exportValue: (s) => format(new Date(s.createdAt), 'd MMM yyyy'), render: (s) => <span className="text-xs text-muted-foreground">{format(new Date(s.createdAt), 'd MMM yyyy')}</span> },
+    { key: 'joined', header: 'Added', width: 'w-28', sortable: true, exportValue: (s) => format(new Date(s.createdAt), 'd MMM yyyy'), render: (s) => <span className="text-xs text-muted-foreground">{format(new Date(s.createdAt), 'd MMM yyyy')}</span> },
     ...(isSuperAdmin ? [{ key: 'tenant', header: 'Tenant', width: 'w-32' as const, exportValue: (s: StaffMember) => s.tenant?.name ?? '', render: (s: StaffMember) => <TenantBadge tenant={s.tenant} /> }] : []),
     {
       key: 'actions',
@@ -589,13 +692,21 @@ function StaffTab() {
 
   return (
     <div className="space-y-4">
-      {canManage && (
-        <div className="flex justify-end">
+      <SectionHero
+        eyebrow="Workforce management"
+        title="Staff members"
+        description="Track school staff, invite them into the platform, and keep their tenant assignment in sync."
+        stats={[
+          { label: 'staff', value: String(total) },
+          { label: 'scope', value: isSuperAdmin ? 'all schools' : 'current school' },
+          { label: 'mode', value: canManage ? 'editable' : 'read only' },
+        ]}
+        action={canManage ? (
           <Button onClick={openCreate} className="gap-1.5 bg-green-600 hover:bg-green-700">
             <UserPlus className="h-4 w-4" /> Add staff
           </Button>
-        </div>
-      )}
+        ) : undefined}
+      />
 
       {query.error && (
         <ErrorState
@@ -610,7 +721,7 @@ function StaffTab() {
         title="Staff members"
         description={total > 0 ? `${total} staff member${total !== 1 ? 's' : ''}` : undefined}
         search={<div className="relative w-full"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Search staff…" className="pl-8 h-9 text-sm" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>}
-        filters={isSuperAdmin ? <TenantFilterSelect tenants={tenants} value={tenantFilter} onChange={(v) => { setTenantFilter(v); setPage(1); }} /> : undefined}
+        filters={isSuperAdmin ? <div className="flex flex-wrap items-center gap-2"><FilterDropdown label="Tenant" options={tenants.map((t) => ({ value: t.id, label: t.name }))} selected={tenantFilter ? [tenantFilter] : []} onChange={(v) => { setTenantFilter(v[v.length - 1] ?? ''); setPage(1); }} />{tenantFilter && <button type="button" onClick={() => { setTenantFilter(''); setPage(1); }} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><X className="h-3 w-3" />Clear</button>}</div> : undefined}
         filtersActive={tenantFilter !== ''}
         exportFilename="settings-staff"
         selectable
@@ -752,12 +863,12 @@ export function SettingsPage() {
         </TabsList>
         {canSeeUsers && (
           <TabsContent value="users" className="mt-4">
-            <Card><CardHeader><CardTitle className="text-base">System users</CardTitle></CardHeader><CardContent><UsersTab /></CardContent></Card>
+            <Card className="overflow-hidden border-border/70 shadow-sm"><CardHeader className="border-b border-border/60 bg-gradient-to-r from-surface-2/50 to-surface-1"><CardTitle className="text-base">System users</CardTitle></CardHeader><CardContent className="p-4 sm:p-6"><UsersTab /></CardContent></Card>
           </TabsContent>
         )}
         {canSeeStaff && (
           <TabsContent value="staff" className="mt-4">
-            <Card><CardHeader><CardTitle className="text-base">Staff members</CardTitle></CardHeader><CardContent><StaffTab /></CardContent></Card>
+            <Card className="overflow-hidden border-border/70 shadow-sm"><CardHeader className="border-b border-border/60 bg-gradient-to-r from-surface-2/50 to-surface-1"><CardTitle className="text-base">Staff members</CardTitle></CardHeader><CardContent className="p-4 sm:p-6"><StaffTab /></CardContent></Card>
           </TabsContent>
         )}
       </Tabs>

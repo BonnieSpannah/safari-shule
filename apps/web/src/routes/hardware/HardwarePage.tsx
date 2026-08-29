@@ -5,7 +5,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
-import { Cpu, Plus, Search, CheckCircle2, Ban, RotateCcw, Copy } from 'lucide-react';
+import { Cpu, Plus, Search, CheckCircle2, Ban, RotateCcw, Copy, X } from 'lucide-react';
+import { FilterDropdown } from '@/components/ui/filter-dropdown';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -17,11 +18,10 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { SearchableSelect } from '@/components/ui/searchable-select';
 
 import { usePermission } from '@/hooks/usePermission';
 import { useDebounce } from '@/hooks/useDebounce';
-import { useTenantFilter, TenantBadge, TenantFilterSelect } from '@/hooks/useTenantFilter';
+import { useTenantFilter, TenantBadge } from '@/hooks/useTenantFilter';
 import { listDevices, registerDevice, setDeviceStatus, type RfidDevice, type RegisterDeviceResult } from '@/lib/api/hardware';
 
 const PAGE_SIZE = 15;
@@ -66,10 +66,10 @@ export function HardwarePage() {
   });
 
   const columns: Column<RfidDevice>[] = [
-    { key: 'device', header: 'Device', width: 'w-full', exportValue: (d) => d.deviceId, render: (d) => (<div><p className="font-mono font-medium text-sm">{d.deviceId}</p>{d.vehicle && <p className="text-xs text-muted-foreground">{d.vehicle.registration} — {d.vehicle.make} {d.vehicle.model}</p>}</div>) },
-    { key: 'status', header: 'Status', exportValue: (d) => d.status, render: (d) => <DeviceStatusBadge status={d.status} /> },
+    { key: 'device', header: 'Device', width: 'w-full', sortable: true, exportValue: (d) => d.deviceId, render: (d) => (<div><p className="font-mono font-medium text-sm">{d.deviceId}</p>{d.vehicle && <p className="text-xs text-muted-foreground">{d.vehicle.registration} — {d.vehicle.make} {d.vehicle.model}</p>}</div>) },
+    { key: 'status', header: 'Status', sortable: true, exportValue: (d) => d.status, render: (d) => <DeviceStatusBadge status={d.status} /> },
     { key: 'lastSeen', header: 'Last seen', exportValue: (d) => d.lastSeenAt ? formatDistanceToNow(new Date(d.lastSeenAt), { addSuffix: true }) : 'Never', render: (d) => <span className="whitespace-nowrap text-xs text-muted-foreground">{d.lastSeenAt ? formatDistanceToNow(new Date(d.lastSeenAt), { addSuffix: true }) : 'Never'}</span> },
-    { key: 'registered', header: 'Registered', exportValue: (d) => format(new Date(d.createdAt), 'd MMM yyyy'), render: (d) => <span className="whitespace-nowrap text-xs text-muted-foreground">{format(new Date(d.createdAt), 'd MMM yyyy')}</span> },
+    { key: 'registered', header: 'Registered', sortable: true, exportValue: (d) => format(new Date(d.createdAt), 'd MMM yyyy'), render: (d) => <span className="whitespace-nowrap text-xs text-muted-foreground">{format(new Date(d.createdAt), 'd MMM yyyy')}</span> },
     ...(isSuperAdmin ? [{ key: 'tenant', header: 'Tenant', render: (d: RfidDevice) => <TenantBadge tenant={d.tenant} /> }] : []),
     { key: 'actions', header: '', align: 'right' as const, width: 'w-10', render: (d) => (<ActionMenu items={[
       ...(d.status !== 'active' ? [{ label: 'Enable', icon: <CheckCircle2 className="h-4 w-4" />, permission: 'rfid_devices.manage', onClick: () => setStatusTarget({ device: d, status: 'active' }) }] : []),
@@ -87,7 +87,7 @@ export function HardwarePage() {
         description={total > 0 ? `${total} device${total !== 1 ? 's' : ''}` : undefined}
         search={<div className="relative w-full"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Search by device ID…" className="pl-8 h-9 text-sm" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>}
 
-        filters={<><SearchableSelect options={[{ value: '', label: 'All statuses' }, ...STATUS_OPTS]} value={statusFilter} onChange={(v) => { setStatusFilter(v); setPage(1); }} placeholder="Status" className="h-9 min-w-[120px]" />{isSuperAdmin && <TenantFilterSelect tenants={tenants} value={tenantFilter} onChange={(v) => { setTenantFilter(v); setPage(1); }} />}</>}
+        filters={<div className="flex flex-wrap items-center gap-2"><FilterDropdown label="Status" options={STATUS_OPTS} selected={statusFilter ? [statusFilter] : []} onChange={(v) => { setStatusFilter(v[v.length-1] ?? ''); setPage(1); }} />{isSuperAdmin && <FilterDropdown label="Tenant" options={tenants.map((t) => ({ value: t.id, label: t.name }))} selected={tenantFilter ? [tenantFilter] : []} onChange={(v) => { setTenantFilter(v[v.length-1] ?? ''); setPage(1); }} />}{(statusFilter || tenantFilter) && <button type="button" onClick={() => { setStatusFilter(''); setTenantFilter(''); setPage(1); }} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><X className="h-3 w-3" />Clear</button>}</div>}
 
         filtersActive={statusFilter !== "" || tenantFilter !== ""}
         exportFilename="hardware-devices"

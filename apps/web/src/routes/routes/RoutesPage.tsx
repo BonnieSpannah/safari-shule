@@ -5,7 +5,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { Route as RouteIcon, Plus, Search, Pencil, Power, Eye, Trash2, GraduationCap } from 'lucide-react';
+import { Route as RouteIcon, Plus, Search, Pencil, Power, Eye, Trash2, GraduationCap, X } from 'lucide-react';
+import { FilterDropdown } from '@/components/ui/filter-dropdown';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 
@@ -21,15 +23,14 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { TenantSelectorField } from '@/components/ui/tenant-selector-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { SearchableSelect } from '@/components/ui/searchable-select';
 
 import { usePermission } from '@/hooks/usePermission';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useClientEvents } from '@/hooks/useClientEvents';
-import { useTenantFilter, TenantBadge, TenantFilterSelect } from '@/hooks/useTenantFilter';
+import { useTenantFilter, TenantBadge } from '@/hooks/useTenantFilter';
 import { listRoutes, createRoute, updateRoute, getRouteStops, replaceRouteStops, type Route, type BusStopDraft } from '@/lib/api/routes';
 import { listStudents } from '@/lib/api/students';
-import { assignStudentToRoute, listRouteAssignments } from '@/lib/api/route-assignments';
+import { assignStudentToRoute, listRouteAssignments } from '../../lib/api/route-assignments';
 
 const PAGE_SIZE = 15;
 
@@ -79,11 +80,11 @@ export function RoutesPage() {
   });
 
   const columns: Column<Route>[] = [
-    { key: 'route', header: 'Route', width: 'w-full', exportValue: (r) => r.name, render: (r) => (<div><p className="font-medium">{r.name}</p>{r.description && <p className="text-xs text-muted-foreground">{r.description}</p>}</div>) },
+    { key: 'route', header: 'Route', width: 'w-full', sortable: true, exportValue: (r) => r.name, render: (r) => (<div><p className="font-medium">{r.name}</p>{r.description && <p className="text-xs text-muted-foreground">{r.description}</p>}</div>) },
     { key: 'status', header: 'Status', width: 'w-24', exportValue: (r) => r.isActive ? 'Active' : 'Inactive', render: (r) => <ActiveBadge active={r.isActive} /> },
-    { key: 'stops', header: 'Bus stops', width: 'w-24', exportValue: (r) => r._count?.busStops ?? 0, render: (r) => <span className="text-sm text-muted-foreground">{r._count?.busStops ?? '—'}</span> },
+    { key: 'stops', header: 'Bus stops', width: 'w-24', sortable: true, exportValue: (r) => r._count?.busStops ?? 0, render: (r) => <span className="text-sm text-muted-foreground">{r._count?.busStops ?? '—'}</span> },
     { key: 'students', header: 'Students', width: 'w-24', exportValue: (r) => r._count?.studentAssignments ?? 0, render: (r) => <span className="text-sm text-muted-foreground">{r._count?.studentAssignments ?? '—'}</span> },
-    { key: 'added', header: 'Added', width: 'w-28', exportValue: (r) => format(new Date(r.createdAt), 'd MMM yyyy'), render: (r) => <span className="whitespace-nowrap text-xs text-muted-foreground">{format(new Date(r.createdAt), 'd MMM yyyy')}</span> },
+    { key: 'added', header: 'Added', width: 'w-28', sortable: true, exportValue: (r) => format(new Date(r.createdAt), 'd MMM yyyy'), render: (r) => <span className="whitespace-nowrap text-xs text-muted-foreground">{format(new Date(r.createdAt), 'd MMM yyyy')}</span> },
     ...(isSuperAdmin ? [{ key: 'tenant', header: 'Tenant', width: 'w-32', render: (r: Route) => <TenantBadge tenant={r.tenant} /> }] : []),
     { key: 'actions', header: '', align: 'right' as const, width: 'w-10', render: (r) => (<ActionMenu items={[{ label: 'View', icon: <Eye className="h-4 w-4" />, permission: 'routes.view', onClick: () => setViewTarget(r) }, { label: 'Edit', icon: <Pencil className="h-4 w-4" />, permission: 'routes.manage', onClick: () => openEdit(r) }, { label: r.isActive ? 'Deactivate' : 'Activate', icon: <Power className="h-4 w-4" />, permission: 'routes.manage', onClick: () => setToggleTarget(r), variant: r.isActive ? 'destructive' as const : 'default' as const }]} />) },
   ];
@@ -106,7 +107,7 @@ export function RoutesPage() {
         description={total > 0 ? `${total} route${total !== 1 ? 's' : ''}` : undefined}
         search={<div className="relative w-full"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Search routes…" className="pl-8 h-9 text-sm" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>}
 
-        filters={<><SearchableSelect options={[{ value: '', label: 'All routes' }, { value: 'true', label: 'Active only' }, { value: 'false', label: 'Inactive only' }]} value={activeFilter} onChange={(v) => { setActiveFilter(v); setPage(1); }} placeholder="Status" className="h-9 min-w-[120px]" />{isSuperAdmin && <TenantFilterSelect tenants={tenants} value={tenantFilter} onChange={(v) => { setTenantFilter(v); setPage(1); }} />}</>}
+        filters={<div className="flex flex-wrap items-center gap-2"><FilterDropdown label="Status" options={[{ value: 'true', label: 'Active' }, { value: 'false', label: 'Inactive' }]} selected={activeFilter ? [activeFilter] : []} onChange={(v) => { setActiveFilter(v[v.length-1] ?? ''); setPage(1); }} />{isSuperAdmin && <FilterDropdown label="Tenant" options={tenants.map((t) => ({ value: t.id, label: t.name }))} selected={tenantFilter ? [tenantFilter] : []} onChange={(v) => { setTenantFilter(v[v.length-1] ?? ''); setPage(1); }} />}{(activeFilter || tenantFilter) && <button type="button" onClick={() => { setActiveFilter(''); setTenantFilter(''); setPage(1); }} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><X className="h-3 w-3" />Clear</button>}</div>}
 
         filtersActive={activeFilter !== "" || tenantFilter !== ""}
         exportFilename="routes"

@@ -69,4 +69,10 @@ export class TenantAdminController {
   setStatus(@Param('id') id: string, @ZodBody(statusSchema) body: z.infer<typeof statusSchema>) {
     return this.svc.setTenantStatus(id, body.status);
   }
+
+  @Post(':id/sync-permissions')
+  @RequirePermission('tenants.manage')
+  syncPermissions(@Param('id') id: string) {
+    return this.svc.syncTenantPermissions(id);
+  }
 }

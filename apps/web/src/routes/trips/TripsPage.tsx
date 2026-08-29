@@ -20,11 +20,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { TenantSelectorField } from '@/components/ui/tenant-selector-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { FilterDropdown } from '@/components/ui/filter-dropdown';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 
 import { usePermission } from '@/hooks/usePermission';
 import { useDebounce } from '@/hooks/useDebounce';
-import { useTenantFilter, TenantBadge, TenantFilterSelect } from '@/hooks/useTenantFilter';
+import { useTenantFilter, TenantBadge } from '@/hooks/useTenantFilter';
 import { listTrips, createTrip, startTrip, endTrip, cancelTrip, type Trip } from '@/lib/api/trips';
 import { listRoutes } from '@/lib/api/routes';
 import { listVehicles } from '@/lib/api/fleet';
@@ -133,10 +134,10 @@ export function TripsPage() {
   });
 
   const columns: Column<Trip>[] = [
-    { key: 'trip', header: 'Trip', width: 'w-full', exportValue: (t) => t.route?.name ?? t.routeId, render: (t) => (<div><p className="font-medium">{t.route?.name ?? t.routeId}</p><p className="text-xs text-muted-foreground capitalize">{t.direction.replace('_', ' ')}</p></div>) },
+    { key: 'trip', header: 'Trip', width: 'w-full', sortable: true, exportValue: (t) => t.route?.name ?? t.routeId, render: (t) => (<div><p className="font-medium">{t.route?.name ?? t.routeId}</p><p className="text-xs text-muted-foreground capitalize">{t.direction.replace('_', ' ')}</p></div>) },
     { key: 'vehicle', header: 'Vehicle', exportValue: (t) => t.vehicle?.registration ?? '', render: (t) => <span className="font-mono text-xs text-muted-foreground whitespace-nowrap">{t.vehicle?.registration ?? '—'}</span> },
-    { key: 'status', header: 'Status', exportValue: (t) => t.status, render: (t) => <TripStatusBadge status={t.status} /> },
-    { key: 'scheduled', header: 'Scheduled', exportValue: (t) => format(new Date(t.scheduledStart), 'd MMM yyyy HH:mm'), render: (t) => <span className="whitespace-nowrap text-xs text-muted-foreground">{format(new Date(t.scheduledStart), 'd MMM, HH:mm')}</span> },
+    { key: 'status', header: 'Status', sortable: true, exportValue: (t) => t.status, render: (t) => <TripStatusBadge status={t.status} /> },
+    { key: 'scheduled', header: 'Scheduled', sortable: true, exportValue: (t) => format(new Date(t.scheduledStart), 'd MMM yyyy HH:mm'), render: (t) => <span className="whitespace-nowrap text-xs text-muted-foreground">{format(new Date(t.scheduledStart), 'd MMM, HH:mm')}</span> },
     { key: 'started', header: 'Started', render: (t) => <span className="whitespace-nowrap text-xs text-muted-foreground">{t.startedAt ? formatDistanceToNow(new Date(t.startedAt), { addSuffix: true }) : '—'}</span> },
     ...(isSuperAdmin ? [{ key: 'tenant', header: 'Tenant', render: (t: Trip) => <TenantBadge tenant={t.tenant} /> }] : []),
     { key: 'actions', header: '', align: 'right' as const, width: 'w-10', render: (t) => (<ActionMenu items={[
@@ -165,7 +166,7 @@ export function TripsPage() {
         description={total > 0 ? `${total} trip${total !== 1 ? 's' : ''}` : undefined}
         search={<div className="relative w-full"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Search by route…" className="pl-8 h-9 text-sm" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>}
 
-        filters={<><SearchableSelect options={[{ value: '', label: 'All statuses' }, ...STATUS_OPTS]} value={statusFilter} onChange={(v) => { setStatusFilter(v); setPage(1); }} placeholder="Status" className="h-9 min-w-[130px]" />{isSuperAdmin && <TenantFilterSelect tenants={tenants} value={tenantFilter} onChange={(v) => { setTenantFilter(v); setPage(1); }} />}</>}
+        filters={<div className="flex flex-wrap items-center gap-2"><FilterDropdown label="Status" options={STATUS_OPTS} selected={statusFilter ? [statusFilter] : []} onChange={(v) => { setStatusFilter(v[v.length-1] ?? ''); setPage(1); }} />{isSuperAdmin && <FilterDropdown label="Tenant" options={tenants.map((t) => ({ value: t.id, label: t.name }))} selected={tenantFilter ? [tenantFilter] : []} onChange={(v) => { setTenantFilter(v[v.length-1] ?? ''); setPage(1); }} />}{(statusFilter || tenantFilter) && <button type="button" onClick={() => { setStatusFilter(''); setTenantFilter(''); setPage(1); }} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><XIcon className="h-3 w-3" />Clear</button>}</div>}
 
         filtersActive={statusFilter !== "" || tenantFilter !== ""}
         exportFilename="trips"

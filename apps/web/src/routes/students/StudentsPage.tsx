@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { format, differenceInYears } from 'date-fns';
-import { GraduationCap, Plus, Search, Pencil, Trash2, Eye, Phone, Mail } from 'lucide-react';
+import { GraduationCap, Plus, Search, Pencil, Trash2, Eye, Phone, Mail, X } from 'lucide-react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -19,11 +19,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { TenantSelectorField } from '@/components/ui/tenant-selector-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { FilterDropdown } from '@/components/ui/filter-dropdown';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { usePermission } from '@/hooks/usePermission';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useClientEvents } from '@/hooks/useClientEvents';
-import { useTenantFilter, TenantBadge, TenantFilterSelect } from '@/hooks/useTenantFilter';
+import { useTenantFilter, TenantBadge } from '@/hooks/useTenantFilter';
 import { listStudents, getStudent, createStudent, updateStudent, deleteStudent, type Student } from '@/lib/api/students';
 
 const PAGE_SIZE = 15;
@@ -74,12 +75,12 @@ export function StudentsPage() {
   });
 
   const columns: Column<Student>[] = [
-    { key: 'student', header: 'Student', width: 'w-full', exportValue: (s) => s.legalName, render: (s) => (<div><p className="font-medium">{s.legalName}</p><p className="text-xs text-muted-foreground font-mono">{s.admissionNumber}</p></div>) },
+    { key: 'student', header: 'Student', width: 'w-full', sortable: true, exportValue: (s) => s.legalName, render: (s) => (<div><p className="font-medium">{s.legalName}</p><p className="text-xs text-muted-foreground font-mono">{s.admissionNumber}</p></div>) },
     { key: 'admission', header: 'Admission #', exportValue: (s) => s.admissionNumber, render: (s) => <span className="font-mono text-xs text-muted-foreground">{s.admissionNumber}</span> },
-    { key: 'class', header: 'Class', exportValue: (s) => s.classroom ?? '', render: (s) => <span className="whitespace-nowrap text-sm text-muted-foreground">{s.classroom ?? '—'}</span> },
+    { key: 'class', header: 'Class', sortable: true, exportValue: (s) => s.classroom ?? '', render: (s) => <span className="whitespace-nowrap text-sm text-muted-foreground">{s.classroom ?? '—'}</span> },
     { key: 'age', header: 'Age', exportValue: (s) => differenceInYears(new Date(), new Date(s.dateOfBirth)), render: (s) => <span className="whitespace-nowrap text-sm text-muted-foreground">{differenceInYears(new Date(), new Date(s.dateOfBirth))} yrs</span> },
     { key: 'gender', header: 'Gender', exportValue: (s) => s.gender, render: (s) => <span className="capitalize text-sm text-muted-foreground">{s.gender}</span> },
-    { key: 'enrolled', header: 'Enrolled', exportValue: (s) => format(new Date(s.createdAt), 'd MMM yyyy'), render: (s) => <span className="whitespace-nowrap text-xs text-muted-foreground">{format(new Date(s.createdAt), 'd MMM yyyy')}</span> },
+    { key: 'enrolled', header: 'Enrolled', sortable: true, exportValue: (s) => format(new Date(s.createdAt), 'd MMM yyyy'), render: (s) => <span className="whitespace-nowrap text-xs text-muted-foreground">{format(new Date(s.createdAt), 'd MMM yyyy')}</span> },
     ...(isSuperAdmin ? [{ key: 'tenant', header: 'Tenant', exportValue: (s: Student) => s.tenant?.name ?? '', render: (s: Student) => <TenantBadge tenant={s.tenant} /> }] : []),
     { key: 'actions', header: '', render: (s) => (<ActionMenu items={[{ label: 'View', icon: <Eye className="h-4 w-4" />, permission: 'students.view', onClick: () => setViewTarget(s) }, { label: 'Edit', icon: <Pencil className="h-4 w-4" />, permission: 'students.edit', onClick: () => openEdit(s) }, { label: 'Remove', icon: <Trash2 className="h-4 w-4" />, permission: 'students.delete', onClick: () => setDeleteTarget(s), variant: 'destructive' }]} />) },
   ];
@@ -101,7 +102,7 @@ export function StudentsPage() {
         title="All students"
         description={total > 0 ? `${total} student${total !== 1 ? 's' : ''}` : undefined}
         search={<div className="relative w-full"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Search…" className="pl-8 h-9 text-sm" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>}
-        filters={<><SearchableSelect options={[{ value: '', label: 'All genders' }, ...GENDER_OPTIONS]} value={genderFilter} onChange={(v) => { setGenderFilter(v); setPage(1); }} placeholder="Gender" className="h-9 min-w-[120px]" />{isSuperAdmin && <TenantFilterSelect tenants={tenants} value={tenantFilter} onChange={(v) => { setTenantFilter(v); setPage(1); }} />}</>}
+        filters={<div className="flex flex-wrap items-center gap-2"><FilterDropdown label="Gender" options={GENDER_OPTIONS} selected={genderFilter ? [genderFilter] : []} onChange={(v) => { setGenderFilter(v[v.length-1] ?? ''); setPage(1); }} />{isSuperAdmin && <FilterDropdown label="Tenant" options={tenants.map((t) => ({ value: t.id, label: t.name }))} selected={tenantFilter ? [tenantFilter] : []} onChange={(v) => { setTenantFilter(v[v.length-1] ?? ''); setPage(1); }} />}{(genderFilter || tenantFilter) && <button type="button" onClick={() => { setGenderFilter(''); setTenantFilter(''); setPage(1); }} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><X className="h-3 w-3" />Clear</button>}</div>}
         filtersActive={genderFilter !== '' || tenantFilter !== ''}
         selectable exportFilename="students"
         page={page} pageSize={PAGE_SIZE} total={total} onPrev={() => setPage((p) => p - 1)} onNext={() => setPage((p) => p + 1)}

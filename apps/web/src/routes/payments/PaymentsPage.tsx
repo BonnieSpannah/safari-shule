@@ -4,7 +4,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { formatDistanceToNow } from 'date-fns';
-import { CreditCard, Plus, Search } from 'lucide-react';
+import { CreditCard, Plus, Search, X } from 'lucide-react';
+import { FilterDropdown } from '@/components/ui/filter-dropdown';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { toast } from 'sonner';
 
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -12,12 +14,11 @@ import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { Input } from '@/components/ui/input';
-import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Button } from '@/components/ui/button';
 import { FormModal } from '@/components/ui/form-modal';
 import { FormField } from '@/components/ui/form-field';
 import { useDebounce } from '@/hooks/useDebounce';
-import { TenantBadge, TenantFilterSelect, useTenantFilter } from '@/hooks/useTenantFilter';
+import { TenantBadge, useTenantFilter } from '@/hooks/useTenantFilter';
 import {
   initiateFuelPayment,
   initiateRepairPayment,
@@ -171,6 +172,7 @@ export function PaymentsPage() {
       key: 'purpose',
       header: 'Purpose',
       width: 'w-full',
+      sortable: true,
       exportValue: (p) => p.purpose,
       render: (p) => (
         <div>
@@ -182,12 +184,14 @@ export function PaymentsPage() {
     {
       key: 'amount',
       header: 'Amount',
+      sortable: true,
       exportValue: (p) => p.amountKes,
       render: (p) => <span className="whitespace-nowrap font-medium">{formatKes(p.amountKes)}</span>,
     },
     {
       key: 'status',
       header: 'Status',
+      sortable: true,
       exportValue: (p) => p.status,
       render: (p) => <StatusBadge status={p.status} />,
     },
@@ -206,6 +210,7 @@ export function PaymentsPage() {
     {
       key: 'initiatedAt',
       header: 'Initiated',
+      sortable: true,
       exportValue: (p) => p.initiatedAt,
       render: (p) => (
         <span className="whitespace-nowrap text-xs text-muted-foreground">
@@ -270,38 +275,12 @@ export function PaymentsPage() {
           </div>
         }
         filters={
-          <>
-            <SearchableSelect
-              options={STATUS_OPTIONS}
-              value={statusFilter}
-              onChange={(v) => {
-                setStatusFilter(v);
-                setPage(1);
-              }}
-              placeholder="Status"
-              className="h-9 min-w-[140px]"
-            />
-            <SearchableSelect
-              options={PURPOSE_OPTIONS}
-              value={purposeFilter}
-              onChange={(v) => {
-                setPurposeFilter(v);
-                setPage(1);
-              }}
-              placeholder="Purpose"
-              className="h-9 min-w-[130px]"
-            />
-            {isSuperAdmin && (
-              <TenantFilterSelect
-                tenants={tenants}
-                value={tenantFilter}
-                onChange={(v) => {
-                  setTenantFilter(v);
-                  setPage(1);
-                }}
-              />
-            )}
-          </>
+          <div className="flex flex-wrap items-center gap-2">
+            <FilterDropdown label="Status" options={STATUS_OPTIONS.filter(o => o.value)} selected={statusFilter ? [statusFilter] : []} onChange={(v) => { setStatusFilter(v[v.length-1] ?? ''); setPage(1); }} />
+            <FilterDropdown label="Purpose" options={PURPOSE_OPTIONS.filter(o => o.value)} selected={purposeFilter ? [purposeFilter] : []} onChange={(v) => { setPurposeFilter(v[v.length-1] ?? ''); setPage(1); }} />
+            {isSuperAdmin && <FilterDropdown label="Tenant" options={tenants.map((t) => ({ value: t.id, label: t.name }))} selected={tenantFilter ? [tenantFilter] : []} onChange={(v) => { setTenantFilter(v[v.length-1] ?? ''); setPage(1); }} />}
+            {(statusFilter || purposeFilter || tenantFilter) && <button type="button" onClick={() => { setStatusFilter(''); setPurposeFilter(''); setTenantFilter(''); setPage(1); }} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><X className="h-3 w-3" />Clear</button>}
+          </div>
         }
         filtersActive={statusFilter !== '' || purposeFilter !== '' || tenantFilter !== ''}
         exportFilename="payments"
