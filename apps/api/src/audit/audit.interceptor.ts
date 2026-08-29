@@ -48,9 +48,42 @@ export class AuditInterceptor implements NestInterceptor {
     // Optionally fetch the current state before the mutation runs
     const before$ = from(
       meta.fetchBefore && entityId && PRISMA_MODEL[meta.entityType]
-        ? runWithBypass(() =>
-            (this.prisma as any)[PRISMA_MODEL[meta.entityType]!].findFirst({ where: { id: entityId } }),
-          ).catch(() => null)
+        ? runWithBypass(async () => {
+            if (meta.entityType === 'trip') {
+              const trip = await this.prisma.trip.findFirst({
+                where: { id: entityId },
+                select: {
+                  id: true,
+                  tenantId: true,
+                  routeId: true,
+                  vehicleId: true,
+                  driverUserId: true,
+                  assistantUserId: true,
+                  scheduledStart: true,
+                  startedAt: true,
+                  endedAt: true,
+                  status: true,
+                  direction: true,
+                  vehicle: { select: { id: true, registration: true, make: true, model: true } },
+                },
+              });
+              if (!trip) return null;
+              const userIds = [trip.driverUserId, trip.assistantUserId].filter(Boolean) as string[];
+              const users = userIds.length > 0
+                ? await this.prisma.user.findMany({
+                  where: { id: { in: userIds } },
+                  select: { id: true, fullName: true, email: true },
+                })
+                : [];
+              const userById = new Map(users.map((user) => [user.id, user]));
+              return {
+                ...trip,
+                driver: userById.get(trip.driverUserId) ?? null,
+                assistant: trip.assistantUserId ? (userById.get(trip.assistantUserId) ?? null) : null,
+              };
+            }
+            return (this.prisma as any)[PRISMA_MODEL[meta.entityType]!].findFirst({ where: { id: entityId } });
+          }).catch(() => null)
         : Promise.resolve(null),
     );
 

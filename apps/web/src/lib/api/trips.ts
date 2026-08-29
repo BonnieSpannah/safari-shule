@@ -17,6 +17,36 @@ export interface Trip {
   tenant?: { id: string; name: string; slug: string } | null;
 }
 
+export interface TripPersonSummary {
+  id: string;
+  fullName: string;
+  email: string | null;
+}
+
+export interface TripLocationSnapshot {
+  id: string;
+  lat: number;
+  lng: number;
+  headingDeg: number | null;
+  speedKph: number | null;
+  recordedAt: string;
+}
+
+export interface TripPassenger {
+  id: string;
+  expected: boolean;
+  boardedAt: string | null;
+  alightedAt: string | null;
+  student: { id: string; legalName: string; admissionNumber: string };
+}
+
+export interface TripDetail extends Trip {
+  passengers: TripPassenger[];
+  locationSnapshots: TripLocationSnapshot[];
+  driver: TripPersonSummary | null;
+  assistant: TripPersonSummary | null;
+}
+
 export interface ListTripsResponse {
   data: Trip[];
   meta: { page: number; pageSize: number; total: number; pageCount: number };
@@ -34,6 +64,16 @@ export interface CreateTripInput {
 
 export async function listTrips(params?: { q?: string; status?: string; tenantId?: string; page?: number; pageSize?: number }): Promise<ListTripsResponse> {
   const { data } = await api.get<ListTripsResponse>('/v1/trips', { params });
+  return data;
+}
+
+export async function getTrip(id: string): Promise<TripDetail> {
+  const { data } = await api.get<TripDetail>(`/v1/trips/${id}`);
+  return data;
+}
+
+export async function updateTripAssignment(id: string, input: { vehicleId?: string; driverUserId?: string; assistantUserId?: string | null; reason?: string | null }): Promise<TripDetail & { assignmentChange?: { reason: string | null; changedAt: string } }> {
+  const { data } = await api.patch<TripDetail & { assignmentChange?: { reason: string | null; changedAt: string } }>(`/v1/trips/${id}/assignment`, input);
   return data;
 }
 

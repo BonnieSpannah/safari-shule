@@ -13,6 +13,7 @@ import { TenantDetailPage } from './platform/TenantDetailPage';
 import { StudentsPage } from './students/StudentsPage';
 import { FleetPage } from './fleet/FleetPage';
 import { RoutesPage } from './routes/RoutesPage';
+import { TripDetailPage } from './trips/TripDetailPage';
 import { SettingsPage } from './settings/SettingsPage';
 import { ParentsPage } from './parents/ParentsPage';
 import { TripsPage } from './trips/TripsPage';
@@ -92,6 +93,14 @@ export const router = createBrowserRouter([
         element: (
           <PermissionGate anyOf={['trips.view', 'trips.dispatch']}>
             <TripsPage />
+          </PermissionGate>
+        ),
+      },
+      {
+        path: 'trips/:id',
+        element: (
+          <PermissionGate anyOf={['trips.view', 'trips.dispatch']}>
+            <TripDetailPage />
           </PermissionGate>
         ),
       },

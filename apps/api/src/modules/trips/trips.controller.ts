@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import type { Request } from 'express';
@@ -18,6 +18,13 @@ import { TripsService } from './trips.service';
 
 const listQuery = paginationQuery.extend({
   status: z.enum(TRIP_STATUSES).optional(),
+});
+
+const tripAssignmentUpdateInput = z.object({
+  vehicleId: z.string().uuid().optional(),
+  driverUserId: z.string().uuid().optional(),
+  assistantUserId: z.string().uuid().nullable().optional(),
+  reason: z.string().trim().max(500).nullable().optional(),
 });
 
 @ApiTags('trips')
@@ -40,6 +47,24 @@ export class TripsController {
   @RequirePermission('trips.view')
   one(@Param('id') id: string) {
     return this.svc.byId(id);
+  }
+
+  @Patch(':id/assignment')
+  @RequirePermission('trips.dispatch')
+  @Audited({ action: 'trip.assignment_update', entityType: 'trip', entityIdParam: 'id', fetchBefore: true })
+  async updateAssignment(
+    @Param('id') id: string,
+    @ZodBody(tripAssignmentUpdateInput) body: z.infer<typeof tripAssignmentUpdateInput>,
+  ) {
+    await this.svc.updateAssignment(id, body);
+    const trip = await this.svc.byId(id);
+    return {
+      ...trip,
+      assignmentChange: {
+        reason: body.reason ?? null,
+        changedAt: new Date().toISOString(),
+      },
+    };
   }
 
   @Post()

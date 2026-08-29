@@ -88,10 +88,11 @@ export class AuditController {
     @ZodQuery(paginationQuery.extend({
       action: z.string().optional(),
       entityType: z.string().optional(),
+      entityId: z.string().uuid().optional(),
       actorUserId: z.string().uuid().optional(),
       /** System admins may pass this to drill into a specific tenant. */
       tenantId: z.string().uuid().optional(),
-    })) q: z.infer<typeof paginationQuery> & { action?: string; entityType?: string; actorUserId?: string; tenantId?: string },
+    })) q: z.infer<typeof paginationQuery> & { action?: string; entityType?: string; entityId?: string; actorUserId?: string; tenantId?: string },
   ) {
     const jwtUser = (req as any).user as { userId: string; tenantId: string };
     const perms = await this.rbac.getUserPermissions(jwtUser.tenantId, jwtUser.userId);
@@ -106,6 +107,7 @@ export class AuditController {
     if (q.q) where.action = { contains: q.q, mode: 'insensitive' };
     if (q.action) where.action = q.action;
     if (q.entityType) where.entityType = q.entityType;
+    if (q.entityId) where.entityId = q.entityId;
     if (q.actorUserId) where.actorUserId = q.actorUserId;
 
     const query = async () => {

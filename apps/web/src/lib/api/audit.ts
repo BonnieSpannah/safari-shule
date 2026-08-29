@@ -47,7 +47,7 @@ export interface ClientAuditEvent {
   payload?: Record<string, unknown>;
 }
 
-export async function listAuditLogs(params?: { q?: string; action?: string; entityType?: string; tenantId?: string; page?: number; pageSize?: number }): Promise<ListAuditResponse> {
+export async function listAuditLogs(params?: { q?: string; action?: string; entityType?: string; entityId?: string; tenantId?: string; page?: number; pageSize?: number }): Promise<ListAuditResponse> {
   const { data } = await api.get<ListAuditResponse>('/v1/audit', { params });
   return data;
 }
