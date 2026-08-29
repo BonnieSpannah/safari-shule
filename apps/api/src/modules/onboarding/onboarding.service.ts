@@ -19,55 +19,91 @@ export class OnboardingService {
     private readonly auth: AuthService,
   ) {}
 
-  async invite(input: { email: string; fullName: string; phone?: string; roleKeys: RoleKey[] }) {
-    const tenantId = requireTenantId();
+  async invite(input: { email: string; fullName: string; phone?: string; roleKeys: RoleKey[]; targetTenantId?: string }) {
+    const tenantId = input.targetTenantId ?? requireTenantId();
     const inviterId = getContext()?.userId;
     if (!inviterId) throw new BadRequestException('Authenticated user required to send invitations.');
 
-    const roleRows = await this.prisma.role.findMany({
-      where: { tenantId, key: { in: input.roleKeys } },
-    });
+    const roleRows = await runWithBypass(() =>
+      this.prisma.role.findMany({ where: { tenantId, key: { in: input.roleKeys } } }),
+    );
     if (roleRows.length !== input.roleKeys.length) {
       throw new BadRequestException('One or more role keys are invalid for this tenant.');
     }
 
-    const existing = await this.prisma.user.findFirst({ where: { tenantId, email: input.email.toLowerCase() } });
+    const existing = await runWithBypass(() =>
+      this.prisma.user.findFirst({ where: { tenantId, email: input.email.toLowerCase() } }),
+    );
     if (existing) throw new BadRequestException('A user with this email already exists in this tenant.');
 
-    const pending = await this.prisma.invitation.findFirst({
-      where: { tenantId, email: input.email.toLowerCase(), acceptedAt: null, expiresAt: { gt: new Date() } },
-    });
-    if (pending) throw new BadRequestException('An active invitation for this email already exists.');
+    // Remove orphaned invitations (old code created invitations without a user record)
+    await runWithBypass(() =>
+      this.prisma.invitation.deleteMany({
+        where: { tenantId, email: input.email.toLowerCase(), acceptedAt: null },
+      }),
+    );
 
+    const tenant = await runWithBypass(() => this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } }));
+    const ttlMs = INVITATION_TTL_DAYS * 86400 * 1000;
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
 
-    const invitation = await this.prisma.invitation.create({
-      data: {
-        tenantId,
-        inviterId,
-        email: input.email.toLowerCase(),
-        phoneE164: input.phone ?? null,
-        fullName: input.fullName,
-        roleKeys: input.roleKeys,
-        tokenHash,
-        expiresAt: new Date(Date.now() + INVITATION_TTL_DAYS * 86400 * 1000),
-      },
+    await runWithBypass(async () => {
+      // Pre-create the user as pending so activation reuses the existing /activate/:token flow
+      const user = await this.prisma.user.create({
+        data: {
+          tenantId,
+          email: input.email.toLowerCase(),
+          phoneE164: input.phone ?? null,
+          fullName: input.fullName,
+          passwordHash: '',   // empty until activation
+          status: 'pending',
+        },
+      });
+
+      if (roleRows.length) {
+        await this.prisma.userRole.createMany({
+          data: roleRows.map((r) => ({ tenantId, userId: user.id, roleId: r.id })),
+        });
+      }
+
+      // Link matching unlinked staff record immediately
+      await this.prisma.staff.updateMany({
+        where: { tenantId, email: input.email.toLowerCase(), userId: null },
+        data: { userId: user.id },
+      });
+
+      // Store activation token in passwordResetToken (purpose='activation') — same as manual user creation
+      await this.prisma.passwordResetToken.create({
+        data: { tenantId, userId: user.id, tokenHash, purpose: 'activation', expiresAt: new Date(Date.now() + ttlMs) },
+      });
+
+      // Record invitation for audit trail
+      await this.prisma.invitation.create({
+        data: {
+          tenantId, inviterId,
+          email: input.email.toLowerCase(),
+          phoneE164: input.phone ?? null,
+          fullName: input.fullName,
+          roleKeys: input.roleKeys,
+          tokenHash,
+          expiresAt: new Date(Date.now() + ttlMs),
+        },
+      });
     });
 
-    const tenant = await runWithBypass(() => this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } }));
-    const acceptUrl = `${this.config.get<string>('app.webPublicUrl')}/onboarding/accept?token=${rawToken}&tenant=${tenant.slug}`;
+    const activateUrl = `${this.config.get<string>('app.webPublicUrl')}/activate/${rawToken}?tenant=${tenant.slug}`;
 
     const emailTpl = renderTemplate('invitation', {
       fullName: input.fullName,
       tenantName: tenant.name,
-      acceptUrl,
+      acceptUrl: activateUrl,
     });
     await this.comms.sendEmail({
       tenantId,
       to: input.email,
       templateId: 'invitation',
-      subject: emailTpl.subject ?? 'You have been invited to Safari Shule',
+      subject: emailTpl.subject ?? `You've been invited to ${tenant.name} on Safari Shule`,
       html: emailTpl.html ?? `<p>${emailTpl.body}</p>`,
       text: emailTpl.body,
     });
@@ -76,13 +112,14 @@ export class OnboardingService {
         tenantId,
         to: input.phone,
         templateId: 'invitation',
-        body: `${tenant.name} invited you to Safari Shule. Set your password: ${acceptUrl}`,
+        body: `${tenant.name} invited you to Safari Shule. Activate your account: ${activateUrl}`,
       });
     }
 
-    return { invitationId: invitation.id, expiresAt: invitation.expiresAt };
+    return { expiresAt: new Date(Date.now() + ttlMs) };
   }
 
+  // Fallback: direct token acceptance (used if someone calls the API endpoint directly)
   async accept(rawToken: string, password: string) {
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const invitation = await runWithBypass(() =>
@@ -92,36 +129,11 @@ export class OnboardingService {
       throw new NotFoundException('Invitation invalid, expired or already used.');
     }
 
-    return runWithBypass(async () => {
-      const passwordHash = await this.auth.hashPassword(password);
-      const user = await this.prisma.user.create({
-        data: {
-          tenantId: invitation.tenantId,
-          email: invitation.email,
-          phoneE164: invitation.phoneE164,
-          fullName: invitation.fullName,
-          passwordHash,
-          status: 'active',
-        },
-      });
-      const roles = await this.prisma.role.findMany({
-        where: { tenantId: invitation.tenantId, key: { in: invitation.roleKeys } },
-      });
-      if (roles.length) {
-        await this.prisma.userRole.createMany({
-          data: roles.map((r) => ({ tenantId: invitation.tenantId, userId: user.id, roleId: r.id })),
-        });
-      }
-      // Link any unlinked staff record with the same email in this tenant
-      await this.prisma.staff.updateMany({
-        where: { tenantId: invitation.tenantId, email: invitation.email, userId: null },
-        data: { userId: user.id },
-      });
-      await this.prisma.invitation.update({
-        where: { id: invitation.id },
-        data: { acceptedAt: new Date() },
-      });
-      return this.auth.issueTokenPair(user);
-    });
+    // Delegate to activateAccount which handles the passwordResetToken correctly
+    const result = await this.auth.activateAccount(rawToken, password);
+    await runWithBypass(() =>
+      this.prisma.invitation.update({ where: { id: invitation.id }, data: { acceptedAt: new Date() } }),
+    );
+    return result;
   }
 }
