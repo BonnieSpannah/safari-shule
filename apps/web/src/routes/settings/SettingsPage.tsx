@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
-import { UserPlus, Mail, Phone, UserX, UserCheck, Search } from 'lucide-react';
+import { UserPlus, Mail, Phone, UserX, UserCheck, Search, Pencil } from 'lucide-react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,7 +27,7 @@ import { usePermission, useAnyPermission } from '@/hooks/usePermission';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useTenantFilter, TenantBadge, TenantFilterSelect } from '@/hooks/useTenantFilter';
 import { humanizeRole } from '@/lib/roles';
-import { listUsers, inviteUser, deactivateUser, activateUser, type User } from '@/lib/api/users';
+import { listUsers, inviteUser, deactivateUser, activateUser, updateUser, type User } from '@/lib/api/users';
 import { listStaff, createStaffMember, updateStaffMember, deleteStaffMember, type StaffMember } from '@/lib/api/staff';
 import type { StaffInput } from '@safari-shule/shared-types';
 
@@ -63,6 +63,14 @@ const inviteSchema = z.object({
 });
 type InviteForm = z.infer<typeof inviteSchema>;
 
+const editUserSchema = z.object({
+  targetTenantId: z.string().uuid().or(z.literal('')).optional(),
+  fullName: z.string().min(2, 'Enter full name'),
+  phoneE164: z.string().trim().regex(/^\+254[17]\d{8}$/, 'Must be a valid Kenyan mobile number').or(z.literal('')).optional(),
+  roleKeys: z.array(z.string()).min(1, 'Select at least one role'),
+});
+type EditUserForm = z.infer<typeof editUserSchema>;
+
 // ─── Staff schema ──────────────────────────────────────────────────────────────
 const staffSchema = z.object({
   targetTenantId: z.string().uuid().or(z.literal('')).optional(),
@@ -96,6 +104,7 @@ function UsersTab() {
   const [tenantFilter, setTenantFilter] = useState('');
   const [page, setPage] = useState(1);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [editUser, setEditUser] = useState<User | null>(null);
   const [confirmUser, setConfirmUser] = useState<{ user: User; action: 'deactivate' | 'activate' } | null>(null);
 
   const dSearch = useDebounce(search, 300);
@@ -110,6 +119,31 @@ function UsersTab() {
   const total = query.data?.meta.total ?? 0;
 
   const form = useForm<InviteForm>({ resolver: zodResolver(inviteSchema), mode: 'onChange' });
+  const editForm = useForm<EditUserForm>({ resolver: zodResolver(editUserSchema), mode: 'onChange' });
+
+  const openEdit = (u: User) => {
+    setEditUser(u);
+    editForm.reset({
+      targetTenantId: u.tenant?.id ?? '',
+      fullName: u.fullName ?? '',
+      phoneE164: u.phoneE164 ?? '',
+      roleKeys: u.userRoles.map((r) => r.role.key),
+    });
+  };
+
+  const editMutation = useMutation({
+    mutationFn: (v: EditUserForm) => updateUser(editUser!.id, {
+      fullName: v.fullName,
+      phoneE164: v.phoneE164 || null,
+      roleKeys: v.roleKeys,
+    }),
+    onSuccess: () => {
+      toast.success('User updated.');
+      setEditUser(null);
+      qc.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: () => toast.error('Could not update user.'),
+  });
 
   const inviteMutation = useMutation({
     mutationFn: (v: InviteForm) => inviteUser({ ...v, phone: v.phone || undefined, targetTenantId: v.targetTenantId || undefined }),
@@ -190,6 +224,7 @@ function UsersTab() {
       exportValue: (u) => format(new Date(u.createdAt), 'd MMM yyyy'),
       render: (u) => <span className="text-xs text-muted-foreground">{format(new Date(u.createdAt), 'd MMM yyyy')}</span>,
     },
+    ...(isSuperAdmin ? [{ key: 'tenant', header: 'Tenant', width: 'w-32' as const, exportValue: (u: User) => u.tenant?.name ?? '', render: (u: User) => <TenantBadge tenant={u.tenant} /> }] : []),
     {
       key: 'actions',
       header: '',
@@ -197,9 +232,10 @@ function UsersTab() {
       align: 'right' as const,
       render: (u) => (
         <ActionMenu items={[
+          { label: 'Edit', icon: <Pencil className="h-4 w-4" />, permission: 'users.update', onClick: () => openEdit(u) },
           u.status === 'active'
-            ? { label: 'Deactivate', icon: <UserX className="h-4 w-4" />, permission: 'invitations.send', onClick: () => setConfirmUser({ user: u, action: 'deactivate' }), variant: 'destructive' }
-            : { label: 'Activate', icon: <UserCheck className="h-4 w-4" />, permission: 'invitations.send', onClick: () => setConfirmUser({ user: u, action: 'activate' }) },
+            ? { label: 'Deactivate', icon: <UserX className="h-4 w-4" />, permission: 'users.deactivate', onClick: () => setConfirmUser({ user: u, action: 'deactivate' }), variant: 'destructive' }
+            : { label: 'Activate', icon: <UserCheck className="h-4 w-4" />, permission: 'users.deactivate', onClick: () => setConfirmUser({ user: u, action: 'activate' }) },
         ]} />
       ),
     },
@@ -302,6 +338,58 @@ function UsersTab() {
         </DialogContent>
       </Dialog>
 
+      {/* Edit user dialog */}
+      <Dialog open={!!editUser} onOpenChange={(o) => { if (!o) setEditUser(null); }}>
+        <DialogContent hideCloseButton className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit — {editUser?.fullName ?? editUser?.email}</DialogTitle>
+            <p className="text-sm text-muted-foreground">Update name, phone or roles.</p>
+            <hr className="mt-1 border-border" />
+          </DialogHeader>
+          <form onSubmit={editForm.handleSubmit((v) => editMutation.mutate(v))} noValidate className="space-y-4">
+            {isSuperAdmin && (
+              <TenantSelectorField
+                value={editForm.watch('targetTenantId') ?? ''}
+                onChange={(v) => editForm.setValue('targetTenantId', v)}
+                hint="User belongs to this school"
+              />
+            )}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Full name <span className="text-danger">*</span></Label>
+                <Input placeholder="Jane Mwangi" invalid={!!editForm.formState.errors.fullName} {...editForm.register('fullName')} />
+                {editForm.formState.errors.fullName && <p className="text-xs text-danger">{editForm.formState.errors.fullName.message}</p>}
+              </div>
+              <div className="space-y-1.5">
+                <Label>Phone</Label>
+                <Input type="tel" placeholder="+254712345678" invalid={!!editForm.formState.errors.phoneE164} {...editForm.register('phoneE164')} />
+                {editForm.formState.errors.phoneE164 && <p className="text-xs text-danger">{editForm.formState.errors.phoneE164.message}</p>}
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Roles <span className="text-danger">*</span></Label>
+                <Controller name="roleKeys" control={editForm.control} render={({ field }) => (
+                  <div className="flex flex-wrap gap-x-4 gap-y-1">
+                    {STAFF_ROLES.map((r) => (
+                      <label key={r.value} className="flex items-center gap-2 cursor-pointer text-sm">
+                        <input type="checkbox" className="accent-primary"
+                          checked={field.value?.includes(r.value) ?? false}
+                          onChange={(e) => {
+                            const cur = field.value ?? [];
+                            field.onChange(e.target.checked ? [...cur, r.value] : cur.filter((v) => v !== r.value));
+                          }} />
+                        {r.label}
+                      </label>
+                    ))}
+                  </div>
+                )} />
+                {editForm.formState.errors.roleKeys && <p className="text-xs text-danger">{editForm.formState.errors.roleKeys.message}</p>}
+              </div>
+            </div>
+            <FormActions onCancel={() => setEditUser(null)} submitLabel="Save changes" submitting={editMutation.isPending} />
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Confirm deactivate/activate */}
       {confirmUser && (
         <ConfirmDialog
@@ -352,6 +440,7 @@ function StaffTab() {
 
   const openInviteForStaff = (s: StaffMember) => {
     inviteForm.reset({
+      targetTenantId: s.tenant?.id ?? '',
       email: s.email ?? '',
       fullName: s.legalName,
       phone: s.phoneE164,
@@ -362,13 +451,14 @@ function StaffTab() {
   };
 
   const inviteStaffMutation = useMutation({
-    mutationFn: (v: InviteForm) => inviteUser({ ...v, phone: v.phone || undefined }),
+    mutationFn: (v: InviteForm) => inviteUser({ ...v, phone: v.phone || undefined, targetTenantId: v.targetTenantId || undefined }),
     onSuccess: () => {
       toast.success('Invitation sent.');
       setInviteOpen(false);
       inviteForm.reset();
       setInviteStaff(null);
       qc.invalidateQueries({ queryKey: ['users'] });
+      qc.invalidateQueries({ queryKey: ['staff'] });
     },
     onError: () => toast.error('Failed to send invitation.'),
   });
@@ -472,7 +562,9 @@ function StaffTab() {
       exportValue: (s) => s.user ? 'Active' : 'Not invited',
       render: (s) => (
         s.user
-          ? <div className="flex items-center gap-1 text-xs"><UserCheck className="h-3.5 w-3.5 text-green-600" />Active</div>
+          ? s.user.status === 'active'
+            ? <div className="flex items-center gap-1 text-xs"><UserCheck className="h-3.5 w-3.5 text-green-600" />Active</div>
+            : <div className="flex items-center gap-1 text-xs text-amber-600"><Mail className="h-3.5 w-3.5" />Pending</div>
           : s.email
             ? <button onClick={() => openInviteForStaff(s)} className="inline-flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 underline-offset-2 hover:underline"><UserPlus className="h-3.5 w-3.5" />Invite</button>
             : <span className="text-xs text-muted-foreground">No email</span>

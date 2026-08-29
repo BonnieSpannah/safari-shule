@@ -1,15 +1,39 @@
-import { Controller, Get, Req } from '@nestjs/common';
+import { BadRequestException, Controller, Get, NotFoundException, Param, Patch, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import type { Request } from 'express';
 import { paginationQuery } from '@safari-shule/shared-types';
 import { RequirePermission } from '../rbac/permission.decorators';
 import { RbacService } from '../rbac/rbac.service';
-import { ZodQuery } from '../common/validation/zod-pipe';
+import { ZodBody, ZodQuery } from '../common/validation/zod-pipe';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { paginated, buildPagination } from '../common/pagination/pagination';
 import { requireTenantId, runWithBypass } from '../common/context/request-context';
 import { resolveTenantScope } from '../common/tenant/tenant-scope';
+
+const USER_SELECT = {
+  id: true,
+  email: true,
+  fullName: true,
+  phoneE164: true,
+  status: true,
+  createdAt: true,
+  lastLoginAt: true,
+  mustChangePassword: true,
+  userRoles: { select: { role: { select: { key: true, label: true } } } },
+  tenant: { select: { id: true, name: true, slug: true } },
+} as const;
+
+const statusSchema = z.object({
+  status: z.enum(['active', 'inactive', 'suspended']),
+});
+
+const editSchema = z.object({
+  fullName: z.string().min(2).max(120).optional(),
+  phoneE164: z.string().trim().regex(/^\+254[17]\d{8}$/).nullable().optional(),
+  roleKeys: z.array(z.string().min(1)).min(1).optional(),
+  targetTenantId: z.string().uuid().optional(),
+});
 
 @ApiTags('users')
 @Controller('users')
@@ -17,52 +41,101 @@ export class UsersController {
   constructor(private readonly prisma: PrismaService, private readonly rbac: RbacService) {}
 
   @Get()
-  @RequirePermission('roles.view')
+  @RequirePermission('users.list')
   async list(
     @Req() req: Request,
-    @ZodQuery(paginationQuery.extend({ status: z.string().optional(), tenantId: z.string().uuid().optional(), roleKey: z.string().optional() })) q: z.infer<typeof paginationQuery> & { status?: string; tenantId?: string; roleKey?: string },
+    @ZodQuery(paginationQuery.extend({
+      status: z.string().optional(),
+      tenantId: z.string().uuid().optional(),
+      roleKey: z.string().optional(),
+    })) q: z.infer<typeof paginationQuery> & { status?: string; tenantId?: string; roleKey?: string },
   ) {
     const scope = await resolveTenantScope(this.rbac, req, q.tenantId);
-    const tenantId = scope.tenantId ?? requireTenantId();
+    // null = super admin with no filter → omit tenantId to query across all tenants
+    const effectiveTenantId = scope.tenantId ?? (scope.isSuperAdmin ? undefined : requireTenantId());
     const run = () => {
-      const where: any = { tenantId };
-      if (q.q) {
-        where.OR = [
-          { fullName: { contains: q.q, mode: 'insensitive' } },
-          { email: { contains: q.q, mode: 'insensitive' } },
-        ];
-      }
+      const where: any = effectiveTenantId ? { tenantId: effectiveTenantId } : {};
+      if (q.q) where.OR = [
+        { fullName: { contains: q.q, mode: 'insensitive' } },
+        { email: { contains: q.q, mode: 'insensitive' } },
+      ];
       if (q.status) where.status = q.status;
       if (q.roleKey) where.userRoles = { some: { role: { key: q.roleKey } } };
-
       return Promise.all([
         this.prisma.user.count({ where }),
-        this.prisma.user.findMany({
-          where,
-          ...buildPagination(q),
-          select: {
-            id: true,
-            email: true,
-            fullName: true,
-            phoneE164: true,
-            status: true,
-            createdAt: true,
-            lastLoginAt: true,
-            mustChangePassword: true,
-            userRoles: {
-              select: { role: { select: { key: true, label: true } } },
-            },
-          },
-        }),
+        this.prisma.user.findMany({ where, ...buildPagination(q), select: USER_SELECT }),
       ]).then(([total, data]) => paginated(data, total, q));
     };
     return scope.isSuperAdmin ? runWithBypass(run) : run();
   }
 
-  @Get(':id/status')
-  @RequirePermission('roles.manage')
-  async getStatus() {
-    // placeholder — status changes go through a PATCH endpoint
-    return {};
+  @Get(':id')
+  @RequirePermission('users.view')
+  async getOne(@Req() req: Request, @Param('id') id: string) {
+    const scope = await resolveTenantScope(this.rbac, req, undefined);
+    const effectiveTenantId = scope.isSuperAdmin ? undefined : requireTenantId();
+    const run = () => this.prisma.user.findFirst({
+      where: effectiveTenantId ? { id, tenantId: effectiveTenantId } : { id },
+      select: USER_SELECT,
+    });
+    const user = scope.isSuperAdmin ? await runWithBypass(run) : await run();
+    if (!user) throw new NotFoundException('User not found.');
+    return user;
+  }
+
+  @Patch(':id')
+  @RequirePermission('users.update')
+  async update(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @ZodBody(editSchema) body: z.infer<typeof editSchema>,
+  ) {
+    const scope = await resolveTenantScope(this.rbac, req, body.targetTenantId);
+    const tenantId = scope.tenantId ?? requireTenantId();
+
+    return runWithBypass(async () => {
+      const user = await this.prisma.user.findFirst({ where: { id, tenantId } });
+      if (!user) throw new NotFoundException('User not found.');
+
+      const { roleKeys, targetTenantId: _t, ...fields } = body;
+
+      if (Object.keys(fields).length) {
+        await this.prisma.user.update({ where: { id }, data: fields });
+      }
+
+      if (roleKeys) {
+        const roles = await this.prisma.role.findMany({ where: { tenantId, key: { in: roleKeys } } });
+        if (roles.length !== roleKeys.length) throw new BadRequestException('One or more role keys are invalid.');
+        await this.prisma.userRole.deleteMany({ where: { userId: id, tenantId } });
+        await this.prisma.userRole.createMany({
+          data: roles.map((r) => ({ tenantId, userId: id, roleId: r.id })),
+        });
+      }
+
+      return this.prisma.user.findUniqueOrThrow({ where: { id }, select: USER_SELECT });
+    });
+  }
+
+  @Patch(':id/status')
+  @RequirePermission('users.deactivate')
+  async setStatus(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @ZodBody(statusSchema) body: z.infer<typeof statusSchema>,
+  ) {
+    const scope = await resolveTenantScope(this.rbac, req, undefined);
+    const effectiveTenantId = scope.isSuperAdmin ? undefined : requireTenantId();
+
+    return runWithBypass(async () => {
+      const user = await this.prisma.user.findFirst({
+        where: effectiveTenantId ? { id, tenantId: effectiveTenantId } : { id },
+      });
+      if (!user) throw new NotFoundException('User not found.');
+      return this.prisma.user.update({
+        where: { id },
+        data: { status: body.status },
+        select: USER_SELECT,
+      });
+    });
   }
 }

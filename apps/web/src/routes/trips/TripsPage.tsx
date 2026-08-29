@@ -105,10 +105,10 @@ export function TripsPage() {
     return dates;
   };
 
-  const createMutation = useMutation({
+  const createMutation = useMutation<{ count?: number }, Error, Form>({
     mutationFn: async (v: Form) => {
       const base = { routeId: v.routeId, vehicleId: v.vehicleId, driverUserId: v.driverUserId, assistantUserId: v.assistantUserId || null, direction: v.direction, targetTenantId: dispatchTenantId || undefined };
-      if (!recurring) return createTrip({ ...base, scheduledStart: v.scheduledStart });
+      if (!recurring) { await createTrip({ ...base, scheduledStart: v.scheduledStart }); return {}; }
       const dates = buildRecurDates(v.scheduledStart);
       if (dates.length === 0) throw new Error('No dates match the selected days in that range.');
       setBatchProgress({ done: 0, total: dates.length });

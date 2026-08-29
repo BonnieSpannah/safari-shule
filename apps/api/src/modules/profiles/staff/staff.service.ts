@@ -18,7 +18,7 @@ export class StaffService {
     ];
     const [total, data] = await Promise.all([
       this.prisma.staff.count({ where }),
-      this.prisma.staff.findMany({ where, ...buildPagination(q), include: { tenant: { select: { id: true, name: true, slug: true } }, user: { select: { id: true, email: true } } } }),
+      this.prisma.staff.findMany({ where, ...buildPagination(q), include: { tenant: { select: { id: true, name: true, slug: true } }, user: { select: { id: true, email: true, status: true } } } }),
     ]);
     return paginated(data, total, q);
   }

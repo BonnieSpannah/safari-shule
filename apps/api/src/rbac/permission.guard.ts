@@ -38,6 +38,8 @@ export class PermissionGuard implements CanActivate {
     }
 
     const perms = await this.rbac.getUserPermissions(user.tenantId, user.userId);
+    // Super admins (tenants.manage) bypass all permission checks
+    if (perms.has('tenants.manage')) return true;
     const missing = required.filter((p) => !perms.has(p));
     if (missing.length > 0) {
       throw new ForbiddenException({

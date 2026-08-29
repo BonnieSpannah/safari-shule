@@ -10,6 +10,7 @@ export interface User {
   lastLoginAt: string | null;
   mustChangePassword: boolean;
   userRoles: { role: { key: string; label: string } }[];
+  tenant?: { id: string; name: string; slug: string } | null;
 }
 
 export interface ListUsersResponse {
@@ -46,4 +47,16 @@ export async function deactivateUser(id: string): Promise<void> {
 
 export async function activateUser(id: string): Promise<void> {
   await api.patch(`/v1/users/${id}/status`, { status: 'active' });
+}
+
+export interface UpdateUserInput {
+  fullName?: string;
+  phoneE164?: string | null;
+  roleKeys?: string[];
+  targetTenantId?: string;
+}
+
+export async function updateUser(id: string, input: UpdateUserInput): Promise<User> {
+  const { data } = await api.patch<User>(`/v1/users/${id}`, input);
+  return data;
 }

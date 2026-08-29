@@ -15,7 +15,7 @@ export interface StaffMember {
   createdAt: string;
   updatedAt: string;
   tenant?: { id: string; name: string; slug: string } | null;
-  user?: { id: string; email: string } | null;
+  user?: { id: string; email: string; status: string } | null;
 }
 
 export interface ListStaffResponse {
