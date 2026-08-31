@@ -10,6 +10,7 @@ abstract class SessionUser with _$SessionUser {
     required String email,
     required String fullName,
     @Default(<String>[]) List<String> roles,
+    @Default(<String>[]) List<String> permissions,
   }) = _SessionUser;
 
   factory SessionUser.fromJson(Map<String, Object?> json) =>

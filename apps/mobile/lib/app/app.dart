@@ -45,7 +45,7 @@ class _SafariShuleAppState extends ConsumerState<SafariShuleApp> {
       final session = next.value;
       if (session != null && !_pushInitialized) {
         _pushInitialized = true;
-        ref.read(pushNotificationsProvider).initialize();
+        ref.read(pushNotificationsProvider).initialize().catchError((_) {});
       }
       if (session == null) {
         _pushInitialized = false;

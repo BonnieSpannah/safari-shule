@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:mobile/core/config/env.dart';
@@ -10,6 +11,10 @@ class PushNotificationsService {
   final FlutterLocalNotificationsPlugin _local = FlutterLocalNotificationsPlugin();
 
   Future<void> initialize() async {
+    if (Firebase.apps.isEmpty) {
+      return;
+    }
+
     await _local.initialize(
       const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),

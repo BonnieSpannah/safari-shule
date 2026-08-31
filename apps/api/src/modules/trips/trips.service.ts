@@ -162,8 +162,28 @@ export class TripsService {
     });
   }
 
+  async startForAssignedDriver(id: string, driverUserId: string) {
+    const trip = await this.prisma.trip.findFirst({ where: { id, driverUserId } });
+    if (!trip) throw new NotFoundException();
+    if (trip.status !== 'scheduled') throw new BadRequestException({ code: 'TRIP_NOT_SCHEDULED' });
+    return this.prisma.trip.update({
+      where: { id },
+      data: { status: 'in_progress' as any, startedAt: new Date() },
+    });
+  }
+
   async end(id: string) {
     const trip = await this.prisma.trip.findFirst({ where: { id } });
+    if (!trip) throw new NotFoundException();
+    if (trip.status !== 'in_progress') throw new BadRequestException({ code: 'TRIP_NOT_IN_PROGRESS' });
+    return this.prisma.trip.update({
+      where: { id },
+      data: { status: 'completed' as any, endedAt: new Date() },
+    });
+  }
+
+  async endForAssignedDriver(id: string, driverUserId: string) {
+    const trip = await this.prisma.trip.findFirst({ where: { id, driverUserId } });
     if (!trip) throw new NotFoundException();
     if (trip.status !== 'in_progress') throw new BadRequestException({ code: 'TRIP_NOT_IN_PROGRESS' });
     return this.prisma.trip.update({

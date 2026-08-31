@@ -24,11 +24,15 @@ class _DriverTripScreenState extends ConsumerState<DriverTripScreen> {
   bool _inProgress = false;
 
   Future<void> _start(WidgetRef ref) {
-    return ref.read(apiClientProvider).post<void>('/trips/${widget.tripId}/start');
+    return ref
+        .read(apiClientProvider)
+        .post<void>('/trips/${widget.tripId}/driver-start');
   }
 
   Future<void> _end(WidgetRef ref) {
-    return ref.read(apiClientProvider).post<void>('/trips/${widget.tripId}/end');
+    return ref
+        .read(apiClientProvider)
+        .post<void>('/trips/${widget.tripId}/driver-end');
   }
 
   Future<void> _sendSos(WidgetRef ref) async {

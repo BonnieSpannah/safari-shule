@@ -68,14 +68,14 @@ void main() {
     await tester.tap(find.text('Start trip'));
     await tester.pumpAndSettle();
 
-    expect(requests.contains('POST /trips/trip-123/start'), isTrue);
+    expect(requests.contains('POST /trips/trip-123/driver-start'), isTrue);
     expect(telemetry.started, isTrue);
     expect(find.text('Trip status: in_progress'), findsOneWidget);
 
     await tester.tap(find.text('End trip'));
     await tester.pumpAndSettle();
 
-    expect(requests.contains('POST /trips/trip-123/end'), isTrue);
+    expect(requests.contains('POST /trips/trip-123/driver-end'), isTrue);
     expect(telemetry.stopped, isTrue);
     expect(find.text('Trip status: scheduled'), findsOneWidget);
   });

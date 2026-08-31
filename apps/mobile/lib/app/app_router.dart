@@ -10,10 +10,13 @@ import 'package:mobile/features/driver/driver_dashboard_screen.dart';
 import 'package:mobile/features/driver/driver_shell.dart';
 import 'package:mobile/features/driver/driver_sos_screen.dart';
 import 'package:mobile/features/driver/driver_trip_screen.dart';
+import 'package:mobile/features/notifications/messages_screen.dart';
+import 'package:mobile/features/operations/operations_dashboard_screen.dart';
 import 'package:mobile/features/parent/parent_children_screen.dart';
 import 'package:mobile/features/parent/parent_payments_screen.dart';
 import 'package:mobile/features/parent/parent_shell.dart';
 import 'package:mobile/features/parent/parent_track_screen.dart';
+import 'package:mobile/features/settings/account_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -26,9 +29,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return '/driver/dashboard';
     }
     if (roles.contains('assistant') || roles.contains('caretaker')) {
-      return '/assistant/dashboard';
+      return '/assistant/scan';
     }
-    return '/parent/children';
+    if (roles.contains('parent')) {
+      return '/parent/children';
+    }
+    return '/operations/dashboard';
   }
 
   return GoRouter(
@@ -50,6 +56,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/login',
         builder: (_, state) => const LoginScreen(),
       ),
+      GoRoute(
+        path: '/operations/dashboard',
+        builder: (_, state) => const OperationsDashboardScreen(),
+      ),
       ShellRoute(
         builder: (_, state, child) => DriverShell(child: child),
         routes: <RouteBase>[
@@ -66,6 +76,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: '/driver/sos',
             builder: (_, state) => const DriverSosScreen(),
           ),
+          GoRoute(
+            path: '/driver/messages',
+            builder: (_, state) => const MessagesScreen(),
+          ),
+          GoRoute(
+            path: '/driver/account',
+            builder: (_, state) => const AccountScreen(),
+          ),
         ],
       ),
       ShellRoute(
@@ -78,6 +96,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/assistant/scan',
             builder: (_, state) => const AssistantScanScreen(),
+          ),
+          GoRoute(
+            path: '/assistant/account',
+            builder: (_, state) => const AccountScreen(),
           ),
         ],
       ),
@@ -97,6 +119,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/parent/payments',
             builder: (_, state) => const ParentPaymentsScreen(),
+          ),
+          GoRoute(
+            path: '/parent/account',
+            builder: (_, state) => const AccountScreen(),
           ),
         ],
       ),

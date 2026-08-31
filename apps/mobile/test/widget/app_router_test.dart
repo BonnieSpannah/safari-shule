@@ -38,6 +38,23 @@ class _DriverSessionNotifier extends SessionNotifier {
   }
 }
 
+class _AdminSessionNotifier extends SessionNotifier {
+  @override
+  Future<Session?> build() async {
+    return const Session(
+      accessToken: 'token',
+      refreshToken: 'refresh',
+      tenantSlug: 'platform',
+      user: SessionUser(
+        id: 'admin-1',
+        email: 'admin@safarishule.test',
+        fullName: 'Platform Admin',
+        roles: <String>['system_admin'],
+      ),
+    );
+  }
+}
+
 void main() {
   testWidgets('unauthenticated users are redirected to login', (tester) async {
     await tester.pumpWidget(
@@ -64,7 +81,46 @@ void main() {
     );
 
     await tester.pumpAndSettle();
-    expect(find.text('Start shift'), findsOneWidget);
+    expect(find.text('Refresh trips'), findsOneWidget);
+  });
+
+  testWidgets('driver can navigate to account and sign out', (tester) async {
+    late GoRouter router;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sessionNotifierProvider.overrideWith(_DriverSessionNotifier.new),
+        ],
+        child: Consumer(
+          builder: (context, ref, child) {
+            router = ref.watch(appRouterProvider);
+            return MaterialApp.router(routerConfig: router);
+          },
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    router.go('/driver/account');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Account'), findsWidgets);
+    expect(find.text('Sign out'), findsOneWidget);
+  });
+
+  testWidgets('system admin lands on operations dashboard after login', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sessionNotifierProvider.overrideWith(_AdminSessionNotifier.new),
+        ],
+        child: const _TestApp(),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(find.text('Operations'), findsOneWidget);
   });
 
   testWidgets('authenticated deep link to driver trip page renders trip screen', (tester) async {

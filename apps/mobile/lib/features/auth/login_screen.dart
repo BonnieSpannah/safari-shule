@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mobile/core/api/api_error.dart';
 import 'package:mobile/core/api/client.dart';
 import 'package:mobile/core/auth/session.dart';
 
@@ -11,9 +12,9 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _email = TextEditingController(text: 'admin@hillcrest.ac.ke');
-  final _password = TextEditingController(text: 'Demo!Password1');
-  final _tenant = TextEditingController(text: 'hillcrest');
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  final _tenant = TextEditingController();
   String? _errorMessage;
 
   @override
@@ -51,6 +52,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(sessionNotifierProvider);
     final loading = state.isLoading;
+    final errorMessage = _errorMessage ??
+      (state.hasError ? apiErrorMessage(state.error!) : null);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Safari Shule Login')),
@@ -75,13 +78,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               decoration: const InputDecoration(labelText: 'Tenant slug'),
             ),
             const SizedBox(height: 16),
-            if (_errorMessage != null)
+            if (errorMessage != null)
               Text(
-                _errorMessage!,
+                errorMessage,
                 key: const Key('login-error'),
                 style: const TextStyle(color: Colors.red),
               ),
-            if (_errorMessage != null) const SizedBox(height: 8),
+            if (errorMessage != null) const SizedBox(height: 8),
             ElevatedButton(
               key: const Key('login-submit'),
               onPressed: loading ? null : _submit,

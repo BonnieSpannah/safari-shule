@@ -22,6 +22,7 @@ apps/mobile/build
 apps/mobile/.dart_tool
 apps/mobile/.flutter-plugins
 apps/mobile/.flutter-plugins-dependencies
+.superpowers/
 infra/grafana/data
 infra/prometheus/data
 infra/postgres/data

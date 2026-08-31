@@ -56,12 +56,12 @@ class TripTelemetryService {
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     };
     try {
-      await _client.post<void>('/trips/$tripId/location', data: payload);
+      await _client.post<void>('/trips/$tripId/driver-location', data: payload);
     } on DioException {
       await OutboxStore.put(
         OutboxEntry(
           id: const Uuid().v4(),
-          endpoint: '/trips/$tripId/location',
+          endpoint: '/trips/$tripId/driver-location',
           method: 'POST',
           body: payload,
           createdAt: DateTime.now().toUtc(),

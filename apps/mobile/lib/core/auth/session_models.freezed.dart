@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$SessionUser {
 
- String get id; String get email; String get fullName; List<String> get roles;
+ String get id; String get email; String get fullName; List<String> get roles; List<String> get permissions;
 /// Create a copy of SessionUser
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $SessionUserCopyWith<SessionUser> get copyWith => _$SessionUserCopyWithImpl<Sess
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SessionUser&&(identical(other.id, id) || other.id == id)&&(identical(other.email, email) || other.email == email)&&(identical(other.fullName, fullName) || other.fullName == fullName)&&const DeepCollectionEquality().equals(other.roles, roles));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SessionUser&&(identical(other.id, id) || other.id == id)&&(identical(other.email, email) || other.email == email)&&(identical(other.fullName, fullName) || other.fullName == fullName)&&const DeepCollectionEquality().equals(other.roles, roles)&&const DeepCollectionEquality().equals(other.permissions, permissions));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,email,fullName,const DeepCollectionEquality().hash(roles));
+int get hashCode => Object.hash(runtimeType,id,email,fullName,const DeepCollectionEquality().hash(roles),const DeepCollectionEquality().hash(permissions));
 
 @override
 String toString() {
-  return 'SessionUser(id: $id, email: $email, fullName: $fullName, roles: $roles)';
+  return 'SessionUser(id: $id, email: $email, fullName: $fullName, roles: $roles, permissions: $permissions)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $SessionUserCopyWith<$Res>  {
   factory $SessionUserCopyWith(SessionUser value, $Res Function(SessionUser) _then) = _$SessionUserCopyWithImpl;
 @useResult
 $Res call({
- String id, String email, String fullName, List<String> roles
+ String id, String email, String fullName, List<String> roles, List<String> permissions
 });
 
 
@@ -65,12 +65,13 @@ class _$SessionUserCopyWithImpl<$Res>
 
 /// Create a copy of SessionUser
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? email = null,Object? fullName = null,Object? roles = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? email = null,Object? fullName = null,Object? roles = null,Object? permissions = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,email: null == email ? _self.email : email // ignore: cast_nullable_to_non_nullable
 as String,fullName: null == fullName ? _self.fullName : fullName // ignore: cast_nullable_to_non_nullable
 as String,roles: null == roles ? _self.roles : roles // ignore: cast_nullable_to_non_nullable
+as List<String>,permissions: null == permissions ? _self.permissions : permissions // ignore: cast_nullable_to_non_nullable
 as List<String>,
   ));
 }
@@ -156,10 +157,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String email,  String fullName,  List<String> roles)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String email,  String fullName,  List<String> roles,  List<String> permissions)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _SessionUser() when $default != null:
-return $default(_that.id,_that.email,_that.fullName,_that.roles);case _:
+return $default(_that.id,_that.email,_that.fullName,_that.roles,_that.permissions);case _:
   return orElse();
 
 }
@@ -177,10 +178,10 @@ return $default(_that.id,_that.email,_that.fullName,_that.roles);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String email,  String fullName,  List<String> roles)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String email,  String fullName,  List<String> roles,  List<String> permissions)  $default,) {final _that = this;
 switch (_that) {
 case _SessionUser():
-return $default(_that.id,_that.email,_that.fullName,_that.roles);case _:
+return $default(_that.id,_that.email,_that.fullName,_that.roles,_that.permissions);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -197,10 +198,10 @@ return $default(_that.id,_that.email,_that.fullName,_that.roles);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String email,  String fullName,  List<String> roles)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String email,  String fullName,  List<String> roles,  List<String> permissions)?  $default,) {final _that = this;
 switch (_that) {
 case _SessionUser() when $default != null:
-return $default(_that.id,_that.email,_that.fullName,_that.roles);case _:
+return $default(_that.id,_that.email,_that.fullName,_that.roles,_that.permissions);case _:
   return null;
 
 }
@@ -212,7 +213,7 @@ return $default(_that.id,_that.email,_that.fullName,_that.roles);case _:
 @JsonSerializable()
 
 class _SessionUser implements SessionUser {
-  const _SessionUser({required this.id, required this.email, required this.fullName, final  List<String> roles = const <String>[]}): _roles = roles;
+  const _SessionUser({required this.id, required this.email, required this.fullName, final  List<String> roles = const <String>[], final  List<String> permissions = const <String>[]}): _roles = roles,_permissions = permissions;
   factory _SessionUser.fromJson(Map<String, dynamic> json) => _$SessionUserFromJson(json);
 
 @override final  String id;
@@ -223,6 +224,13 @@ class _SessionUser implements SessionUser {
   if (_roles is EqualUnmodifiableListView) return _roles;
   // ignore: implicit_dynamic_type
   return EqualUnmodifiableListView(_roles);
+}
+
+ final  List<String> _permissions;
+@override@JsonKey() List<String> get permissions {
+  if (_permissions is EqualUnmodifiableListView) return _permissions;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_permissions);
 }
 
 
@@ -239,16 +247,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _SessionUser&&(identical(other.id, id) || other.id == id)&&(identical(other.email, email) || other.email == email)&&(identical(other.fullName, fullName) || other.fullName == fullName)&&const DeepCollectionEquality().equals(other._roles, _roles));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _SessionUser&&(identical(other.id, id) || other.id == id)&&(identical(other.email, email) || other.email == email)&&(identical(other.fullName, fullName) || other.fullName == fullName)&&const DeepCollectionEquality().equals(other._roles, _roles)&&const DeepCollectionEquality().equals(other._permissions, _permissions));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,email,fullName,const DeepCollectionEquality().hash(_roles));
+int get hashCode => Object.hash(runtimeType,id,email,fullName,const DeepCollectionEquality().hash(_roles),const DeepCollectionEquality().hash(_permissions));
 
 @override
 String toString() {
-  return 'SessionUser(id: $id, email: $email, fullName: $fullName, roles: $roles)';
+  return 'SessionUser(id: $id, email: $email, fullName: $fullName, roles: $roles, permissions: $permissions)';
 }
 
 
@@ -259,7 +267,7 @@ abstract mixin class _$SessionUserCopyWith<$Res> implements $SessionUserCopyWith
   factory _$SessionUserCopyWith(_SessionUser value, $Res Function(_SessionUser) _then) = __$SessionUserCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String email, String fullName, List<String> roles
+ String id, String email, String fullName, List<String> roles, List<String> permissions
 });
 
 
@@ -276,12 +284,13 @@ class __$SessionUserCopyWithImpl<$Res>
 
 /// Create a copy of SessionUser
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? email = null,Object? fullName = null,Object? roles = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? email = null,Object? fullName = null,Object? roles = null,Object? permissions = null,}) {
   return _then(_SessionUser(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,email: null == email ? _self.email : email // ignore: cast_nullable_to_non_nullable
 as String,fullName: null == fullName ? _self.fullName : fullName // ignore: cast_nullable_to_non_nullable
 as String,roles: null == roles ? _self._roles : roles // ignore: cast_nullable_to_non_nullable
+as List<String>,permissions: null == permissions ? _self._permissions : permissions // ignore: cast_nullable_to_non_nullable
 as List<String>,
   ));
 }

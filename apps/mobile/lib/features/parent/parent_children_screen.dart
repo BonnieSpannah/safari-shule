@@ -1,17 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/core/api/client.dart';
+import 'package:mobile/core/api/paginated_response.dart';
 
 final childrenProvider = FutureProvider<List<Map<String, Object?>>>((ref) async {
   final response = await ref.read(apiClientProvider).get<Map<String, Object?>>('/students');
-  final items = response.data?['items'];
-  if (items is! List) {
-    return const <Map<String, Object?>>[];
-  }
-  return items
-      .whereType<Map<Object?, Object?>>()
-      .map((item) => Map<String, Object?>.from(item))
-      .toList(growable: false);
+  return readPaginatedRecords(response.data ?? <String, Object?>{});
 });
 
 class ParentChildrenScreen extends ConsumerWidget {

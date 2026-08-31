@@ -14,6 +14,7 @@ describe('Trips — GET /v1/trips (e2e)', () => {
   let auth: AuthService;
   let alpha: SeededTenant;
   let beta: SeededTenant;
+  let alphaTripId: string;
 
   beforeAll(async () => {
     ({ app, prisma, tenantAdmin, auth } = await bootstrapTestApp());
@@ -32,7 +33,7 @@ describe('Trips — GET /v1/trips (e2e)', () => {
           NOW(), NOW()
         );
       `;
-      await prisma.trip.create({
+      const trip = await prisma.trip.create({
         data: {
           tenantId: alpha.tenantId,
           routeId: alphaRouteId,
@@ -43,6 +44,7 @@ describe('Trips — GET /v1/trips (e2e)', () => {
           status: 'scheduled',
         },
       });
+      alphaTripId = trip.id;
     });
   });
 
@@ -100,5 +102,53 @@ describe('Trips — GET /v1/trips (e2e)', () => {
 
     // Driver role has trips.view — expect 200
     expect(res.status).toBe(200);
+  });
+
+  it('allows an assigned driver to start and end their scheduled trip', async () => {
+    const started = await request(app.getHttpServer())
+      .post(`/v1/trips/${alphaTripId}/driver-start`)
+      .set('Authorization', `Bearer ${alpha.driverAccessToken}`)
+      .set('x-tenant-id', alpha.tenantId);
+
+    expect(started.status).toBe(201);
+    expect(started.body.status).toBe('in_progress');
+
+    const ended = await request(app.getHttpServer())
+      .post(`/v1/trips/${alphaTripId}/driver-end`)
+      .set('Authorization', `Bearer ${alpha.driverAccessToken}`)
+      .set('x-tenant-id', alpha.tenantId);
+
+    expect(ended.status).toBe(201);
+    expect(ended.body.status).toBe('completed');
+  });
+
+  it('allows an assigned driver to post a location for their in-progress trip', async () => {
+    await runWithBypass(() =>
+      prisma.trip.update({
+        where: { id: alphaTripId },
+        data: { status: 'scheduled', startedAt: null, endedAt: null },
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .post(`/v1/trips/${alphaTripId}/driver-start`)
+      .set('Authorization', `Bearer ${alpha.driverAccessToken}`)
+      .set('x-tenant-id', alpha.tenantId)
+      .expect(201);
+
+    const location = await request(app.getHttpServer())
+      .post(`/v1/trips/${alphaTripId}/driver-location`)
+      .set('Authorization', `Bearer ${alpha.driverAccessToken}`)
+      .set('x-tenant-id', alpha.tenantId)
+      .send({
+        lat: -1.2921,
+        lng: 36.8219,
+        heading_degrees: 90,
+        speed_mps: 8,
+        timestamp: Date.now(),
+      });
+
+    expect(location.status).toBe(201);
+    expect(location.body).toEqual({ ok: true });
   });
 });

@@ -23,6 +23,7 @@ dependencies:
   flutter_map: ^8.2.2
   latlong2: ^0.9.1
   flutter_local_notifications: ^19.4.0
+  firebase_core: ^4.0.0
   firebase_messaging: ^16.0.4
   local_auth: ^2.3.0
   flutter_nfc_kit: ^3.6.0

@@ -53,6 +53,31 @@ class FakeSessionNotifierError extends SessionNotifier {
   }
 }
 
+class FakeSessionNotifierStateError extends SessionNotifier {
+  @override
+  Future<Session?> build() async => null;
+
+  @override
+  Future<void> login({
+    required Dio client,
+    required String email,
+    required String password,
+    required String tenantSlug,
+  }) async {
+    state = AsyncValue.error(
+      DioException(
+        requestOptions: RequestOptions(path: '/auth/login'),
+        response: Response<Object?>(
+          requestOptions: RequestOptions(path: '/auth/login'),
+          statusCode: 400,
+          data: <String, Object?>{'message': 'Tenant could not be resolved.'},
+        ),
+      ),
+      StackTrace.current,
+    );
+  }
+}
+
 class FakeSessionNotifierLoading extends SessionNotifier {
   final Completer<void> _completer = Completer<void>();
 
@@ -111,6 +136,27 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('login-error')), findsOneWidget);
+    expect(find.text('Login failed. Check credentials and tenant.'), findsOneWidget);
+  });
+
+  testWidgets('LoginScreen displays SessionNotifier API errors', (WidgetTester tester) async {
+    final client = Dio();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          apiClientProvider.overrideWithValue(client),
+          sessionNotifierProvider.overrideWith(FakeSessionNotifierStateError.new),
+        ],
+        child: const MaterialApp(home: LoginScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('login-submit')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('login-error')), findsOneWidget);
+    expect(find.text('Tenant could not be resolved.'), findsOneWidget);
   });
 
   testWidgets('LoginScreen loading state disables submit', (WidgetTester tester) async {

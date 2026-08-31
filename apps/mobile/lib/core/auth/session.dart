@@ -52,11 +52,16 @@ class SessionNotifier extends AsyncNotifier<Session?> {
       final roles = rolesRaw is List
           ? rolesRaw.whereType<String>().toList(growable: false)
           : const <String>[];
+      final permissionsRaw = meData['permissions'];
+      final permissions = permissionsRaw is List
+          ? permissionsRaw.whereType<String>().toList(growable: false)
+          : const <String>[];
       final user = SessionUser(
         id: (meData['id'] as String?) ?? '',
         email: (meData['email'] as String?) ?? email,
         fullName: (meData['fullName'] as String?) ?? '',
         roles: roles,
+        permissions: permissions,
       );
       final session = Session(
         accessToken: accessToken,
@@ -91,14 +96,17 @@ class SessionNotifier extends AsyncNotifier<Session?> {
 
   Future<void> logout({required Dio client}) async {
     final current = state.value;
-    if (current != null) {
-      await client.post<void>(
-        '/auth/logout',
-        data: <String, Object?>{'refreshToken': current.refreshToken},
-        options: Options(headers: <String, Object?>{'X-Tenant-Slug': current.tenantSlug}),
-      );
+    try {
+      if (current != null) {
+        await client.post<void>(
+          '/auth/logout',
+          data: <String, Object?>{'refreshToken': current.refreshToken},
+          options: Options(headers: <String, Object?>{'X-Tenant-Slug': current.tenantSlug}),
+        );
+      }
+    } finally {
+      await clear();
     }
-    await clear();
   }
 
   Future<void> clear() async {

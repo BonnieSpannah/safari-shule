@@ -13,6 +13,11 @@ _SessionUser _$SessionUserFromJson(Map<String, dynamic> json) => _SessionUser(
   roles:
       (json['roles'] as List<dynamic>?)?.map((e) => e as String).toList() ??
       const <String>[],
+  permissions:
+      (json['permissions'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList() ??
+      const <String>[],
 );
 
 Map<String, dynamic> _$SessionUserToJson(_SessionUser instance) =>
@@ -21,6 +26,7 @@ Map<String, dynamic> _$SessionUserToJson(_SessionUser instance) =>
       'email': instance.email,
       'fullName': instance.fullName,
       'roles': instance.roles,
+      'permissions': instance.permissions,
     };
 
 _ImpersonationState _$ImpersonationStateFromJson(Map<String, dynamic> json) =>

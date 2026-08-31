@@ -27,6 +27,14 @@ const tripAssignmentUpdateInput = z.object({
   reason: z.string().trim().max(500).nullable().optional(),
 });
 
+function requireAuthenticatedUserId(req: Request): string {
+  const user = req.user as { userId?: string } | undefined;
+  if (!user?.userId) {
+    throw new Error('Authenticated user is unavailable.');
+  }
+  return user.userId;
+}
+
 @ApiTags('trips')
 @Controller('trips')
 export class TripsController {
@@ -83,11 +91,25 @@ export class TripsController {
     return this.svc.start(id);
   }
 
+  @Post(':id/driver-start')
+  @RequirePermission('trips.view')
+  @Audited({ action: 'trip.start', entityType: 'trip', entityIdParam: 'id' })
+  startAsDriver(@Param('id') id: string, @Req() req: Request) {
+    return this.svc.startForAssignedDriver(id, requireAuthenticatedUserId(req));
+  }
+
   @Post(':id/end')
   @RequirePermission('trips.dispatch')
   @Audited({ action: 'trip.end', entityType: 'trip', entityIdParam: 'id' })
   end(@Param('id') id: string) {
     return this.svc.end(id);
+  }
+
+  @Post(':id/driver-end')
+  @RequirePermission('trips.view')
+  @Audited({ action: 'trip.end', entityType: 'trip', entityIdParam: 'id' })
+  endAsDriver(@Param('id') id: string, @Req() req: Request) {
+    return this.svc.endForAssignedDriver(id, requireAuthenticatedUserId(req));
   }
 
   @Post(':id/cancel')

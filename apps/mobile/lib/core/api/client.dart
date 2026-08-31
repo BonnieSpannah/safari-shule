@@ -1,15 +1,31 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/core/auth/session.dart';
 import 'package:mobile/core/config/env.dart';
 import 'package:uuid/uuid.dart';
 
 final apiClientProvider = Provider<Dio>((ref) {
-  final dio = Dio(BaseOptions(baseUrl: ApiConfig.baseUrl));
+  final dio = Dio(BaseOptions(baseUrl: ApiConfig.connectionBaseUrl));
+  if (ApiConfig.usesHostOverride) {
+    final httpClient = HttpClient();
+    httpClient.findProxy = (Uri uri) => 'DIRECT';
+    httpClient.badCertificateCallback =
+        (X509Certificate certificate, String host, int port) =>
+            host == ApiConfig.hostOverride;
+    dio.httpClientAdapter = IOHttpClientAdapter(
+      createHttpClient: () => httpClient,
+    );
+  }
 
   dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) {
+        if (ApiConfig.usesHostOverride) {
+          options.headers['Host'] = ApiConfig.canonicalHost;
+        }
         final session = ref.read(sessionNotifierProvider).value;
         final traceId = const Uuid().v4();
         options.headers['X-Trace-Id'] = traceId;
