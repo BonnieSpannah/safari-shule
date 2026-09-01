@@ -65,7 +65,21 @@ Sequenced milestones from now to production-ready SaaS ERP for Kenyan schools. E
 - Daily M-Pesa reconciliation job (matches Safaricom statement CSV to `MpesaTransaction`)
 - Fee structures per class/route, invoice generation, statement of account per parent
 
-### M8 — Mobile (Flutter, one codebase, six targets)
+### M7 — Driver Trip Workflow (🚧 In Progress — Tasks 1–4 of 7 done)
+
+Branch: `feat/m7-flutter-mobile`. See `docs/superpowers/specs/2026-09-01-driver-trip-workflow-design.md` for full design and `.superpowers/sdd/progress.md` for task-level progress.
+
+- [x] DB invariant: one active trip per driver (partial unique index + `TRIP_ALREADY_ACTIVE` 409)
+- [x] Persisted cancellation reason on trips
+- [x] `GET /v1/trips/driver-workspace` — JWT-scoped, returns active/upcoming/recent (max 20) with PostGIS coords
+- [x] `GET /v1/trips/driver/:id` — owned detail with route control points, passenger counts, telemetry snapshots
+- [x] Typed Flutter domain models: `DriverWorkspace`, `DriverTripDetail`, `TripLocationSnapshot`, exhaustive status/action/map policy (73 tests)
+- [x] Task-first driver dashboard: active trip owns screen with compact map + **Resume trip**; next scheduled fallback; login empty-tenant guard
+- [ ] Status-aware trip detail + 4 map layer modes (planned / live / travelled / partial) ← **next**
+- [ ] Idempotent telemetry + lifecycle coordinator (login → resume → logout)
+- [ ] Full suite + Android emulator walkthrough + confirm + merge
+
+### M8 — Mobile: Remaining Driver + Assistant + Parent Flows
 
 - Full details in [MOBILE.md](MOBILE.md)
 - Driver + Assistant + Parent shells in the same binary
@@ -145,16 +159,16 @@ We are deliberately **not** doing:
 
 ## Decision log
 
-| Date | Decision | Owner |
-|---|---|---|
-| 2026-06-30 | GitLab Flow + Conventional Commits + squash-into-main | Team |
-| 2026-06-30 | All stateful services in Docker always | Team |
-| 2026-06-30 | Herd for local TLS on `*.safarishule.test` | Team |
-| 2026-07-09 | Vite + React + Tailwind + Savanna design system for web | Team |
-| 2026-07-09 | 250+ permission atomic catalog with specialist roles | Team |
-| 2026-07-09 | Provider abstractions for SMS + email; M-Pesa remains sole payments | Team |
-| 2026-07-09 | Full governance foundation before more product work | Team |
-| 2026-07-09 | Flutter single codebase for all six targets | Team |
+| Date       | Decision                                                            | Owner |
+| ---------- | ------------------------------------------------------------------- | ----- |
+| 2026-06-30 | GitLab Flow + Conventional Commits + squash-into-main               | Team  |
+| 2026-06-30 | All stateful services in Docker always                              | Team  |
+| 2026-06-30 | Herd for local TLS on `*.safarishule.test`                          | Team  |
+| 2026-07-09 | Vite + React + Tailwind + Savanna design system for web             | Team  |
+| 2026-07-09 | 250+ permission atomic catalog with specialist roles                | Team  |
+| 2026-07-09 | Provider abstractions for SMS + email; M-Pesa remains sole payments | Team  |
+| 2026-07-09 | Full governance foundation before more product work                 | Team  |
+| 2026-07-09 | Flutter single codebase for all six targets                         | Team  |
 
 ## Cadence
 

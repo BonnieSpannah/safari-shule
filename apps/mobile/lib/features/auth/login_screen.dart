@@ -27,6 +27,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _submit() async {
     final messenger = ScaffoldMessenger.of(context);
+    final tenantSlug = _tenant.text.trim();
+    if (tenantSlug.isEmpty) {
+      setState(() {
+        _errorMessage = 'Enter your school tenant slug.';
+      });
+      return;
+    }
     try {
       setState(() {
         _errorMessage = null;
@@ -35,7 +42,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             client: ref.read(apiClientProvider),
             email: _email.text.trim(),
             password: _password.text,
-            tenantSlug: _tenant.text.trim(),
+            tenantSlug: tenantSlug,
           );
     } catch (error) {
       if (!mounted) {

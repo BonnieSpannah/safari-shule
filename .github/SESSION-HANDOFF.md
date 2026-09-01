@@ -1,7 +1,7 @@
 # SESSION HANDOFF — Safari Shule Development Status
 
-**Current Date:** 2026-08-27  
-**Last Updated:** M6 (DX + CI/CD + branch protection + Herd)  
+**Current Date:** 2026-09-01  
+**Last Updated:** M7 — Driver trip workflow (in progress, Tasks 1–4 of 7 complete)  
 **Repo:** https://github.com/BonnieSpannah/safari-shule (private)
 
 ---
@@ -239,44 +239,75 @@ After running `make db-seed-local`:
 
 ---
 
-## Immediate Next Steps (Priority Order)
+## M7 — Driver Trip Workflow (In Progress)
 
-### 1. ✅ M6 Branch Merge (This Session)
+Branch: `feat/m7-flutter-mobile`  
+Design spec: `docs/superpowers/specs/2026-09-01-driver-trip-workflow-design.md`  
+Implementation plan: `docs/superpowers/plans/2026-09-01-driver-trip-workflow.md`  
+Progress ledger: `.superpowers/sdd/progress.md`
 
-- Create feature branch: `feat/m6-dx-herd-codeowners`
-- Commit all M6 changes with Conventional Commits
-- Squash merge to `main` after review
-- Push to origin
+### Completed (Tasks 1–4)
 
-### 2. 🎯 Run Herd Setup (New Users)
+| Task | Scope                                                                                                                                                                                                               | Commit                                  |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| 1    | One-active-trip DB invariant, cancellation reason, `TRIP_ALREADY_ACTIVE` 409, concurrency race catch                                                                                                                | `3d44590` + following uncommitted fixes |
+| 2    | `GET /v1/trips/driver-workspace` + `GET /v1/trips/driver/:id` — JWT-scoped, tenant-safe, PostGIS route/snapshot extraction                                                                                          | uncommitted (pushed with this session)  |
+| 3    | Typed immutable Flutter models: `DriverWorkspace`, `DriverTripDetail`, `TripLocationSnapshot` (with heading/speed/recordedAt), exhaustive `TripMapMode`/`DriverTripAction` policy, strict `FormatException` parsing | uncommitted                             |
+| 4    | Task-first driver dashboard (`driverWorkspaceProvider`, compact `DriverTripMap`, active-trip owns screen, next-scheduled fallback, recent history, error/empty/loading), login tenant guard                         | uncommitted                             |
+
+### Remaining (Tasks 5–7)
+
+| Task | Scope                                                                                                                                                                                 | Status  |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 5    | Status-aware trip detail screen + 4 map layer modes (planned / live / travelled / cancelledPartial), start/end confirmations, 409 conflict recovery, websocket reconnecting indicator | ⏳ Next |
+| 6    | Idempotent telemetry service (`TripLocationAdapter`), `DriverTripCoordinator`, app lifecycle observer (login → resume → logout)                                                       | ⏳      |
+| 7    | Full API e2e + Flutter widget suite green, emulator walkthrough at large font scale, push and confirm                                                                                 | ⏳      |
+
+### How to resume
 
 ```bash
-./bin/herd-setup.sh      # One-time setup
-make infra               # Start Docker services
-make api-dev             # Terminal 1
-make web-dev             # Terminal 2
-# Open https://safari-shule.test
+# Infrastructure (must be running)
+make infra
+
+# API (terminal 1)
+nvm use && make api-dev
+
+# Web (terminal 2)
+make web-dev
+
+# Android emulator (terminal 3)
+"$HOME/Library/Android/sdk/emulator/emulator" -avd Pixel_7
+
+# Flutter app (terminal 4, from apps/mobile)
+flutter run -d emulator-5554 \
+  --dart-define=API_BASE_URL=https://api.safari-shule.test/v1 \
+  --dart-define=API_HOST_OVERRIDE=10.0.2.2
 ```
 
-### 3. ⏭️ M2 — Web MVP Screens (Next Milestone)
+Login credentials (seed `hillcrest` tenant): see Demo Credentials table below.
+
+## Immediate Next Steps (Priority Order)
+
+### 1. 🎯 Complete M7 Driver Trip Workflow (Tasks 5–7)
+
+See plan file for exact steps. Key deliverables:
+
+- `DriverTripScreen` with 4 status-specific map modes
+- `DriverTripCoordinator` for telemetry restore on login/resume
+- Full e2e + widget suites green, Android emulator walkthrough confirmed
+
+### 2. ⏭️ M2 — Web MVP Screens
 
 - Implement Fleet, Routes, Students, Trips, Incidents, Payments, Settings screens
 - Wire up placeholder API calls
 - Add error/loading/empty states to all screens
-- Coverage target: happy path + 3 edge cases per screen
 
-### 4. ⏭️ M3 — API Gap-Close + Governance Runtime
+### 3. ⏭️ M3 — API Gap-Close + Governance Runtime
 
 - Implement missing `/v1` endpoints for M2 screens
 - Wire governance runtime (client-events sink, DNC check, impersonation controller)
 - Add Prometheus counters + metrics
 - Set up Sentry + GlitchTip
-
-### 5. 📚 Documentation Delivery (Ongoing)
-
-- Complete remaining docs (user guides, architecture, troubleshooting)
-- Each new endpoint requires a doc entry
-- CI gate: `docs-coverage` workflow enforces this
 
 ---
 

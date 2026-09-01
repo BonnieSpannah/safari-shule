@@ -1,0 +1,389 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile/features/driver/driver_dashboard_screen.dart';
+import 'package:mobile/features/driver/driver_trip_models.dart';
+import 'package:mobile/features/driver/driver_trip_providers.dart';
+
+// ── Fixtures ──────────────────────────────────────────────────────────────
+
+DriverTripDetail _makeDetail({
+  String id = 'trip-active',
+  DriverTripStatus status = DriverTripStatus.inProgress,
+}) {
+  return DriverTripDetail.fromJson(<String, Object?>{
+    'id': id,
+    'status': switch (status) {
+      DriverTripStatus.scheduled => 'scheduled',
+      DriverTripStatus.inProgress => 'in_progress',
+      DriverTripStatus.completed => 'completed',
+      DriverTripStatus.cancelled => 'cancelled',
+    },
+    'scheduledStart': '2026-09-01T06:00:00.000Z',
+    'startedAt': '2026-09-01T06:05:00.000Z',
+    'endedAt': null,
+    'direction': 'outbound',
+    'routeId': 'route-1',
+    'vehicleId': 'vehicle-1',
+    'route': <String, Object?>{
+      'id': 'route-1',
+      'name': 'Kilimani to Hillcrest',
+      'startPoint': <String, Object?>{'lat': -1.2921, 'lng': 36.8219},
+      'endPoint': <String, Object?>{'lat': -1.2800, 'lng': 36.8300},
+      'busStops': <Object?>[],
+    },
+    'passengerSummary': <String, Object?>{
+      'expected': 10,
+      'boarded': 8,
+      'onBoard': 8,
+      'alighted': 0,
+    },
+    'cancellationReason': null,
+    'locationSnapshots': <Object?>[
+      <String, Object?>{
+        'lat': -1.2921,
+        'lng': 36.8219,
+        'headingDeg': 45.0,
+        'speedKph': 30.0,
+        'recordedAt': '2026-09-01T06:10:00.000Z',
+      },
+    ],
+  });
+}
+
+DriverWorkspace _activeWorkspace() => DriverWorkspace.fromJson(<String, Object?>{
+      'activeTrip': <String, Object?>{
+        'id': 'trip-active',
+        'status': 'in_progress',
+        'scheduledStart': '2026-09-01T06:00:00.000Z',
+        'startedAt': '2026-09-01T06:05:00.000Z',
+        'endedAt': null,
+        'direction': 'outbound',
+        'routeId': 'route-1',
+        'vehicleId': 'vehicle-1',
+        'route': <String, Object?>{'id': 'route-1', 'name': 'Kilimani to Hillcrest'},
+        'vehicle': <String, Object?>{
+          'id': 'vehicle-1',
+          'registration': 'KCA 123A',
+          'capacity': 14,
+        },
+        '_count': <String, Object?>{'passengers': 8},
+      },
+      'upcomingTrips': <Object?>[
+        <String, Object?>{
+          'id': 'trip-2',
+          'status': 'scheduled',
+          'scheduledStart': '2026-09-01T14:00:00.000Z',
+          'startedAt': null,
+          'endedAt': null,
+          'direction': 'inbound',
+          'routeId': 'route-2',
+          'vehicleId': 'vehicle-1',
+          'route': <String, Object?>{'id': 'route-2', 'name': 'Hillcrest to Kilimani'},
+          'vehicle': <String, Object?>{
+            'id': 'vehicle-1',
+            'registration': 'KCA 123A',
+            'capacity': 14,
+          },
+          '_count': <String, Object?>{'passengers': 5},
+        },
+      ],
+      'recentTrips': <Object?>[
+        <String, Object?>{
+          'id': 'trip-old',
+          'status': 'completed',
+          'scheduledStart': '2026-08-31T06:00:00.000Z',
+          'startedAt': '2026-08-31T06:05:00.000Z',
+          'endedAt': '2026-08-31T07:10:00.000Z',
+          'direction': 'outbound',
+          'routeId': 'route-1',
+          'vehicleId': 'vehicle-1',
+          'route': <String, Object?>{'id': 'route-1', 'name': 'Kilimani to Hillcrest'},
+          'vehicle': <String, Object?>{
+            'id': 'vehicle-1',
+            'registration': 'KCA 123A',
+            'capacity': 14,
+          },
+          '_count': <String, Object?>{'passengers': 10},
+        },
+      ],
+    });
+
+DriverWorkspace _noActiveWorkspace() => DriverWorkspace.fromJson(<String, Object?>{
+      'activeTrip': null,
+      'upcomingTrips': <Object?>[
+        <String, Object?>{
+          'id': 'trip-next',
+          'status': 'scheduled',
+          'scheduledStart': '2026-09-01T07:00:00.000Z',
+          'startedAt': null,
+          'endedAt': null,
+          'direction': 'outbound',
+          'routeId': 'route-1',
+          'vehicleId': 'vehicle-1',
+          'route': <String, Object?>{'id': 'route-1', 'name': 'Kilimani to Hillcrest'},
+          'vehicle': <String, Object?>{
+            'id': 'vehicle-1',
+            'registration': 'KCA 123A',
+            'capacity': 14,
+          },
+          '_count': <String, Object?>{'passengers': 6},
+        },
+        <String, Object?>{
+          'id': 'trip-later',
+          'status': 'scheduled',
+          'scheduledStart': '2026-09-01T14:00:00.000Z',
+          'startedAt': null,
+          'endedAt': null,
+          'direction': 'inbound',
+          'routeId': 'route-2',
+          'vehicleId': 'vehicle-1',
+          'route': <String, Object?>{'id': 'route-2', 'name': 'Hillcrest to Kilimani'},
+          'vehicle': <String, Object?>{
+            'id': 'vehicle-1',
+            'registration': 'KCA 123A',
+            'capacity': 14,
+          },
+          '_count': <String, Object?>{'passengers': 4},
+        },
+      ],
+      'recentTrips': <Object?>[],
+    });
+
+DriverWorkspace _emptyWorkspace() => DriverWorkspace.fromJson(<String, Object?>{
+      'activeTrip': null,
+      'upcomingTrips': <Object?>[],
+      'recentTrips': <Object?>[],
+    });
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+Widget _wrap(Widget child, {List<Object> overrides = const []}) =>
+    ProviderScope(
+      overrides: overrides.cast(),
+      child: MaterialApp(home: child),
+    );
+
+// ── Tests ─────────────────────────────────────────────────────────────────
+
+void main() {
+  group('DriverDashboardScreen — active trip', () {
+    testWidgets('shows Resume trip, route name, and compact map preview', (
+      WidgetTester tester,
+    ) async {
+      final workspace = _activeWorkspace();
+      final detail = _makeDetail();
+
+      await tester.pumpWidget(
+        _wrap(
+          const DriverDashboardScreen(),
+          overrides: [
+            driverWorkspaceProvider.overrideWith((_) async => workspace),
+            driverTripDetailProvider('trip-active').overrideWith((_) async => detail),
+          ],
+        ),
+      );
+      await tester.pump(); // schedule futures
+      await tester.pump(); // settle providers
+
+      expect(find.byKey(const Key('driver-active-trip')), findsOneWidget);
+      expect(find.text('Resume trip'), findsOneWidget);
+      expect(find.text('Kilimani to Hillcrest'), findsOneWidget);
+      expect(find.byKey(const Key('driver-active-map-preview')), findsOneWidget);
+    });
+
+    testWidgets('shows Up next section for additional upcoming trips', (
+      WidgetTester tester,
+    ) async {
+      final workspace = _activeWorkspace();
+      final detail = _makeDetail();
+
+      await tester.pumpWidget(
+        _wrap(
+          const DriverDashboardScreen(),
+          overrides: [
+            driverWorkspaceProvider.overrideWith((_) async => workspace),
+            driverTripDetailProvider('trip-active').overrideWith((_) async => detail),
+          ],
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Up next'), findsOneWidget);
+    });
+
+    testWidgets('shows View all for recent trips', (WidgetTester tester) async {
+      final workspace = _activeWorkspace();
+      final detail = _makeDetail();
+
+      await tester.pumpWidget(
+        _wrap(
+          const DriverDashboardScreen(),
+          overrides: [
+            driverWorkspaceProvider.overrideWith((_) async => workspace),
+            driverTripDetailProvider('trip-active').overrideWith((_) async => detail),
+          ],
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byKey(const Key('driver-recent-trips')), findsOneWidget);
+      expect(find.text('View all'), findsOneWidget);
+    });
+  });
+
+  group('DriverDashboardScreen — no active trip', () {
+    testWidgets('earliest upcoming is primary, shows View route, no Resume trip', (
+      WidgetTester tester,
+    ) async {
+      final workspace = _noActiveWorkspace();
+
+      await tester.pumpWidget(
+        _wrap(
+          const DriverDashboardScreen(),
+          overrides: [driverWorkspaceProvider.overrideWith((_) async => workspace)],
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byKey(const Key('driver-next-trip')), findsOneWidget);
+      expect(find.text('Kilimani to Hillcrest'), findsOneWidget);
+      expect(find.text('View route'), findsOneWidget);
+      expect(find.text('Resume trip'), findsNothing);
+    });
+
+    testWidgets('additional upcoming trips are shown compactly', (
+      WidgetTester tester,
+    ) async {
+      final workspace = _noActiveWorkspace();
+
+      await tester.pumpWidget(
+        _wrap(
+          const DriverDashboardScreen(),
+          overrides: [driverWorkspaceProvider.overrideWith((_) async => workspace)],
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Hillcrest to Kilimani'), findsOneWidget);
+    });
+
+    testWidgets('does not show a Start button on dashboard', (
+      WidgetTester tester,
+    ) async {
+      final workspace = _noActiveWorkspace();
+
+      await tester.pumpWidget(
+        _wrap(
+          const DriverDashboardScreen(),
+          overrides: [driverWorkspaceProvider.overrideWith((_) async => workspace)],
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Start'), findsNothing);
+      expect(find.text('Start trip'), findsNothing);
+    });
+  });
+
+  group('DriverDashboardScreen — empty', () {
+    testWidgets('shows No trips assigned message', (WidgetTester tester) async {
+      final workspace = _emptyWorkspace();
+
+      await tester.pumpWidget(
+        _wrap(
+          const DriverDashboardScreen(),
+          overrides: [driverWorkspaceProvider.overrideWith((_) async => workspace)],
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('No trips assigned'), findsOneWidget);
+    });
+  });
+
+  group('DriverDashboardScreen — loading', () {
+    testWidgets('shows skeleton with stable dimensions while loading', (
+      WidgetTester tester,
+    ) async {
+      final never = Completer<DriverWorkspace>();
+
+      await tester.pumpWidget(
+        _wrap(
+          const DriverDashboardScreen(),
+          overrides: [
+            driverWorkspaceProvider.overrideWith((_) => never.future),
+          ],
+        ),
+      );
+      await tester.pump();
+
+      // Loading skeleton must be visible; no spinner fallback that collapses content area
+      expect(find.byKey(const Key('driver-workspace-skeleton')), findsOneWidget);
+    });
+  });
+
+  group('DriverDashboardScreen — error', () {
+    testWidgets('shows error message and retry button', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        _wrap(
+          const DriverDashboardScreen(),
+          overrides: [
+            driverWorkspaceProvider.overrideWithValue(
+              AsyncValue.error(Exception('Network unavailable'), StackTrace.empty),
+            ),
+          ],
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byKey(const Key('driver-workspace-retry')), findsOneWidget);
+    });
+
+    testWidgets('retry button triggers provider refresh', (WidgetTester tester) async {
+      var callCount = 0;
+
+      // Use overrideWith so invalidate actually re-runs the build function.
+      await tester.pumpWidget(
+        _wrap(
+          const DriverDashboardScreen(),
+          overrides: [
+            driverWorkspaceProvider.overrideWith((_) {
+              callCount++;
+              // Return a rejected Future — Riverpod 3 exposes this as AsyncLoading+hasError.
+              return Future.error(Exception('fail'), StackTrace.empty);
+            }),
+          ],
+        ),
+      );
+
+      // Let the async provider run and error.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump();
+
+      // The provider ran at least once.
+      expect(callCount, greaterThanOrEqualTo(1));
+      final countBefore = callCount;
+
+      // Error view is now showing (Riverpod 3 retry keeps state as AsyncLoading+hasError).
+      expect(find.byKey(const Key('driver-workspace-retry')), findsOneWidget);
+
+      // Tap the retry button — triggers ref.invalidate(driverWorkspaceProvider).
+      await tester.tap(find.byKey(const Key('driver-workspace-retry')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump();
+
+      expect(callCount, greaterThan(countBefore));
+    });
+  });
+}

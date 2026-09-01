@@ -96,6 +96,23 @@ class FakeSessionNotifierLoading extends SessionNotifier {
   }
 }
 
+class FakeSessionNotifierCapturing extends SessionNotifier {
+  int loginCalls = 0;
+
+  @override
+  Future<Session?> build() async => null;
+
+  @override
+  Future<void> login({
+    required Dio client,
+    required String email,
+    required String password,
+    required String tenantSlug,
+  }) async {
+    loginCalls += 1;
+  }
+}
+
 void main() {
   testWidgets('LoginScreen happy path renders and submits', (WidgetTester tester) async {
     final client = Dio();
@@ -132,6 +149,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.enterText(find.byKey(const Key('login-tenant')), 'hillcrest');
     await tester.tap(find.byKey(const Key('login-submit')));
     await tester.pump();
 
@@ -152,6 +170,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.enterText(find.byKey(const Key('login-tenant')), 'hillcrest');
     await tester.tap(find.byKey(const Key('login-submit')));
     await tester.pump();
 
@@ -172,9 +191,43 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.enterText(find.byKey(const Key('login-tenant')), 'hillcrest');
     await tester.tap(find.byKey(const Key('login-submit')));
     await tester.pump();
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  testWidgets('LoginScreen requires a tenant slug before submitting', (
+    WidgetTester tester,
+  ) async {
+    final client = Dio();
+    late FakeSessionNotifierCapturing notifier;
+    final container = ProviderContainer(
+      overrides: [
+        apiClientProvider.overrideWithValue(client),
+        sessionNotifierProvider.overrideWith(() {
+          notifier = FakeSessionNotifierCapturing();
+          return notifier;
+        }),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: LoginScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('login-email')), 'driver@example.test');
+    await tester.enterText(find.byKey(const Key('login-password')), 'Password1!');
+    await tester.tap(find.byKey(const Key('login-submit')));
+    await tester.pump();
+
+    expect(find.text('Enter your school tenant slug.'), findsOneWidget);
+    expect(notifier.loginCalls, 0);
   });
 }
