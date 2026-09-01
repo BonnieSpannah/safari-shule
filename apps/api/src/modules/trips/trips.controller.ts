@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import { Controller, Get, Param, Patch, Post, Req, UnauthorizedException } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import type { Request } from 'express';
@@ -30,7 +30,7 @@ const tripAssignmentUpdateInput = z.object({
 function requireAuthenticatedUserId(req: Request): string {
   const user = req.user as { userId?: string } | undefined;
   if (!user?.userId) {
-    throw new Error('Authenticated user is unavailable.');
+    throw new UnauthorizedException('Authenticated user is unavailable.');
   }
   return user.userId;
 }
@@ -49,6 +49,18 @@ export class TripsController {
     const scope = await resolveTenantScope(this.rbac, req, q.tenantId);
     const run = () => this.svc.list({ ...q, scopeTenantId: scope.tenantId });
     return scope.isSuperAdmin ? runWithBypass(run) : run();
+  }
+
+  @Get('driver-workspace')
+  @RequirePermission('trips.view')
+  driverWorkspace(@Req() req: Request) {
+    return this.svc.driverWorkspace(requireAuthenticatedUserId(req));
+  }
+
+  @Get('driver/:id')
+  @RequirePermission('trips.view')
+  driverDetail(@Param('id') id: string, @Req() req: Request) {
+    return this.svc.driverDetail(id, requireAuthenticatedUserId(req));
   }
 
   @Get(':id')

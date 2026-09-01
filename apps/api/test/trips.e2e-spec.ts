@@ -59,6 +59,15 @@ describe('Trips — GET /v1/trips (e2e)', () => {
         },
       });
       alphaSecondTripId = trip2.id;
+
+      await prisma.$executeRaw`
+        INSERT INTO trip_location_snapshots (id, "tenantId", "tripId", "speedKph", "headingDeg", "recordedAt", location)
+        VALUES (
+          ${randomUUID()}::uuid, ${alpha.tenantId}::uuid, ${alphaTripId}::uuid,
+          30.0, 45.0, NOW(),
+          ST_SetSRID(ST_MakePoint(36.8219, -1.2864), 4326)::geography
+        )
+      `;
     });
   });
 
@@ -170,7 +179,7 @@ describe('Trips — GET /v1/trips (e2e)', () => {
     await runWithBypass(async () => {
       await prisma.trip.updateMany({
         where: { id: { in: [alphaTripId, alphaSecondTripId] } },
-        data: { status: 'scheduled' as any, startedAt: null, endedAt: null },
+        data: { status: 'scheduled' as any, startedAt: null, endedAt: null, cancellationReason: null },
       });
     });
   }
@@ -293,6 +302,59 @@ describe('Trips — GET /v1/trips (e2e)', () => {
     expect(response.body).toMatchObject({
       code: 'TRIP_ALREADY_ACTIVE',
       details: { activeTripId: alphaTripId },
+    });
+  });
+
+  it('assignment race: concurrent requests mapping to an in-progress driver always return 409 not 500', async () => {
+    await runWithBypass(async () => {
+      await prisma.trip.update({
+        where: { id: alphaTripId },
+        data: { status: 'in_progress' as any, startedAt: new Date(), endedAt: null },
+      });
+      await prisma.trip.update({
+        where: { id: alphaSecondTripId },
+        data: { status: 'scheduled' as any, startedAt: null, endedAt: null, cancellationReason: null },
+      });
+    });
+
+    const responses = await Promise.all([
+      request(app.getHttpServer())
+        .patch(`/v1/trips/${alphaSecondTripId}/assignment`)
+        .set('Authorization', `Bearer ${alpha.adminAccessToken}`)
+        .set('x-tenant-id', alpha.tenantId)
+        .send({ driverUserId: alpha.driverUserId }),
+      request(app.getHttpServer())
+        .patch(`/v1/trips/${alphaSecondTripId}/assignment`)
+        .set('Authorization', `Bearer ${alpha.adminAccessToken}`)
+        .set('x-tenant-id', alpha.tenantId)
+        .send({ driverUserId: alpha.driverUserId }),
+    ]);
+
+    for (const res of responses) {
+      expect(res.status).not.toBe(500);
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({
+        code: 'TRIP_ALREADY_ACTIVE',
+        details: { activeTripId: alphaTripId },
+      });
+    }
+  });
+
+  it('GET /v1/trips/:id returns locationSnapshots with correct camelCase columns', async () => {
+    const res = await request(app.getHttpServer())
+      .get(`/v1/trips/${alphaTripId}`)
+      .set('Authorization', `Bearer ${alpha.adminAccessToken}`)
+      .set('x-tenant-id', alpha.tenantId)
+      .expect(200);
+
+    expect(Array.isArray(res.body.locationSnapshots)).toBe(true);
+    expect(res.body.locationSnapshots.length).toBeGreaterThanOrEqual(1);
+    expect(res.body.locationSnapshots[0]).toMatchObject({
+      lat: expect.any(Number),
+      lng: expect.any(Number),
+      speedKph: expect.any(Number),
+      headingDeg: expect.any(Number),
+      recordedAt: expect.any(String),
     });
   });
 });

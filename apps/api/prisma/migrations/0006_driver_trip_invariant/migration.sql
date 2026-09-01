@@ -8,7 +8,7 @@ BEGIN
   SELECT "tenantId", "driverUserId", COUNT(*) AS active_count
   INTO duplicate_record
   FROM "trips"
-  WHERE "status" = 'in_progress'
+  WHERE "status" = 'in_progress'::"TripStatus"
   GROUP BY "tenantId", "driverUserId"
   HAVING COUNT(*) > 1
   LIMIT 1;
@@ -24,4 +24,4 @@ END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS "trips_one_active_per_driver_idx"
   ON "trips"("tenantId", "driverUserId")
-  WHERE "status" = 'in_progress';
+  WHERE "status" = 'in_progress'::"TripStatus";

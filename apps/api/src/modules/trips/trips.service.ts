@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, TripStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { paginated, buildPagination } from '../../common/pagination/pagination';
 import { requireTenantId } from '../../common/context/request-context';
@@ -9,6 +9,134 @@ import type { TripInput, PaginationQuery } from '@safari-shule/shared-types';
 @Injectable()
 export class TripsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async driverWorkspace(driverUserId: string) {
+    const tenantId = requireTenantId();
+    const summaryInclude = {
+      route: { select: { id: true, name: true } },
+      vehicle: { select: { id: true, registration: true, capacity: true } },
+      _count: { select: { passengers: true } },
+    } satisfies Prisma.TripInclude;
+
+    const [activeTrip, upcomingTrips, recentTrips] = await Promise.all([
+      this.prisma.trip.findFirst({
+        where: { tenantId, driverUserId, status: TripStatus.in_progress },
+        include: summaryInclude,
+      }),
+      this.prisma.trip.findMany({
+        where: { tenantId, driverUserId, status: TripStatus.scheduled },
+        include: summaryInclude,
+        orderBy: { scheduledStart: 'asc' },
+      }),
+      this.prisma.trip.findMany({
+        where: { tenantId, driverUserId, status: { in: [TripStatus.completed, TripStatus.cancelled] } },
+        include: summaryInclude,
+        orderBy: [{ endedAt: 'desc' }, { scheduledStart: 'desc' }],
+        take: 20,
+      }),
+    ]);
+
+    return { activeTrip, upcomingTrips, recentTrips };
+  }
+
+  async driverDetail(id: string, driverUserId: string) {
+    const tenantId = requireTenantId();
+    const trip = await this.prisma.trip.findFirst({
+      where: { id, driverUserId, tenantId },
+      include: {
+        vehicle: { select: { id: true, registration: true, capacity: true } },
+        passengers: true,
+      },
+    });
+    if (!trip) throw new NotFoundException();
+
+    const routeRows = await this.prisma.$queryRaw<{
+      routeId: string;
+      routeName: string;
+      startLat: number;
+      startLng: number;
+      endLat: number;
+      endLng: number;
+      busStopId: string | null;
+      busStopName: string | null;
+      pickupOrder: number | null;
+      stopLat: number | null;
+      stopLng: number | null;
+    }[]>`
+      SELECT
+        r.id AS "routeId",
+        r.name AS "routeName",
+        ST_Y(r."startPoint"::geometry)::float8 AS "startLat",
+        ST_X(r."startPoint"::geometry)::float8 AS "startLng",
+        ST_Y(r."endPoint"::geometry)::float8 AS "endLat",
+        ST_X(r."endPoint"::geometry)::float8 AS "endLng",
+        bs.id AS "busStopId",
+        bs.name AS "busStopName",
+        bs."pickupOrder",
+        ST_Y(bs.location::geometry)::float8 AS "stopLat",
+        ST_X(bs.location::geometry)::float8 AS "stopLng"
+      FROM routes r
+      LEFT JOIN bus_stops bs ON bs."routeId" = r.id AND bs."tenantId" = ${tenantId}::uuid
+      WHERE r.id = ${trip.routeId}::uuid
+        AND r."tenantId" = ${tenantId}::uuid
+      ORDER BY bs."pickupOrder" ASC NULLS LAST
+    `;
+
+    if (!routeRows.length) throw new NotFoundException();
+
+    const firstRow = routeRows[0];
+    const route = {
+      id: firstRow.routeId,
+      name: firstRow.routeName,
+      startPoint: { lat: firstRow.startLat, lng: firstRow.startLng },
+      endPoint: { lat: firstRow.endLat, lng: firstRow.endLng },
+      busStops: routeRows
+        .filter((r) => r.busStopId !== null)
+        .map((r) => ({
+          id: r.busStopId,
+          name: r.busStopName,
+          pickupOrder: r.pickupOrder,
+          location: { lat: r.stopLat, lng: r.stopLng },
+        })),
+    };
+
+    const passengerSummary = {
+      expected: trip.passengers.filter((p) => p.expected).length,
+      boarded: trip.passengers.filter((p) => p.boardedAt !== null).length,
+      onBoard: trip.passengers.filter((p) => p.boardedAt !== null && p.alightedAt === null).length,
+      alighted: trip.passengers.filter((p) => p.alightedAt !== null).length,
+    };
+
+    const locationSnapshots = await this.prisma.$queryRaw<{
+      lat: number;
+      lng: number;
+      speedKph: number;
+      headingDeg: number;
+      recordedAt: Date;
+    }[]>`
+      SELECT
+        ST_Y(location::geometry)::float8 AS lat,
+        ST_X(location::geometry)::float8 AS lng,
+        "speedKph",
+        "headingDeg",
+        "recordedAt"
+      FROM trip_location_snapshots
+      WHERE "tripId" = ${trip.id}::uuid
+        AND "tenantId" = ${tenantId}::uuid
+      ORDER BY "recordedAt" ASC
+    `;
+
+    const { passengers: _passengers, ...tripData } = trip;
+    return {
+      ...tripData,
+      route,
+      passengerSummary,
+      locationSnapshots: locationSnapshots.map((s) => ({
+        ...s,
+        recordedAt: s.recordedAt.toISOString(),
+      })),
+    };
+  }
 
   async list(q: PaginationQuery & { status?: string; sortAsc?: string; scopeTenantId?: string | null }) {
     const tenantId = q.scopeTenantId !== undefined ? q.scopeTenantId : requireTenantId();
@@ -31,41 +159,42 @@ export class TripsService {
   }
 
   async byId(id: string) {
-    const [row, locationSnapshots] = await Promise.all([
-      this.prisma.trip.findFirst({
-        where: { id },
-        include: {
-          route: { select: { id: true, name: true, description: true, isActive: true, tenant: { select: { id: true, name: true, slug: true } } } },
-          vehicle: true,
-          tenant: { select: { id: true, name: true, slug: true } },
-          passengers: {
-            include: {
-              student: { select: { id: true, legalName: true, admissionNumber: true } },
-            },
+    const row = await this.prisma.trip.findFirst({
+      where: { id },
+      include: {
+        route: { select: { id: true, name: true, description: true, isActive: true, tenant: { select: { id: true, name: true, slug: true } } } },
+        vehicle: true,
+        tenant: { select: { id: true, name: true, slug: true } },
+        passengers: {
+          include: {
+            student: { select: { id: true, legalName: true, admissionNumber: true } },
           },
         },
-      }),
+      },
+    });
+    if (!row) throw new NotFoundException();
+    const userIds = [row.driverUserId, row.assistantUserId].filter(Boolean) as string[];
+    const [locationSnapshots, users] = await Promise.all([
       this.prisma.$queryRaw<{ id: string; lat: number; lng: number; headingDeg: number | null; speedKph: number | null; recordedAt: Date }[]>`
         SELECT
           id,
           ST_Y(location::geometry)::float8 AS lat,
           ST_X(location::geometry)::float8 AS lng,
-          heading_degrees AS "headingDeg",
-          speed_mps * 3.6 AS "speedKph",
-          occurred_at AS "recordedAt"
+          "headingDeg",
+          "speedKph",
+          "recordedAt"
         FROM trip_location_snapshots
-        WHERE "trip_id" = ${id}::uuid
-        ORDER BY "occurred_at" ASC
+        WHERE "tripId" = ${id}::uuid
+          AND "tenantId" = ${row.tenantId}::uuid
+        ORDER BY "recordedAt" ASC
       `,
+      userIds.length > 0
+        ? this.prisma.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, fullName: true, email: true },
+          })
+        : Promise.resolve([]),
     ]);
-    if (!row) throw new NotFoundException();
-    const userIds = [row.driverUserId, row.assistantUserId].filter(Boolean) as string[];
-    const users = userIds.length > 0
-      ? await this.prisma.user.findMany({
-        where: { id: { in: userIds } },
-        select: { id: true, fullName: true, email: true },
-      })
-      : [];
     const userById = new Map(users.map((user) => [user.id, user]));
     return {
       ...row,
@@ -131,14 +260,29 @@ export class TripsService {
       if (!assistant) throw new BadRequestException('Selected assistant must be an active assistant in this tenant.');
     }
 
-    return this.prisma.trip.update({
-      where: { id },
-      data: {
-        ...(nextVehicleId ? { vehicleId: nextVehicleId } : {}),
-        ...(nextDriverUserId ? { driverUserId: nextDriverUserId } : {}),
-        ...(nextAssistantUserId !== undefined ? { assistantUserId: nextAssistantUserId } : {}),
-      },
-    });
+    try {
+      return await this.prisma.trip.update({
+        where: { id },
+        data: {
+          ...(nextVehicleId ? { vehicleId: nextVehicleId } : {}),
+          ...(nextDriverUserId ? { driverUserId: nextDriverUserId } : {}),
+          ...(nextAssistantUserId !== undefined ? { assistantUserId: nextAssistantUserId } : {}),
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const conflictDriverId = nextDriverUserId ?? trip.driverUserId;
+        const activeTripId = await this.findActiveTripId(trip.tenantId, conflictDriverId, id);
+        throw activeTripId
+          ? this.activeTripConflict(activeTripId)
+          : new ConflictException({
+              code: ERROR_CODES.TRIP_ALREADY_ACTIVE,
+              message: 'Driver already has a trip in progress.',
+              details: { activeTripId: null },
+            });
+      }
+      throw error;
+    }
   }
 
   create(input: TripInput & { targetTenantId?: string }) {
@@ -203,7 +347,13 @@ export class TripsService {
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         const winnerId = await this.findActiveTripId(trip.tenantId, trip.driverUserId);
-        if (winnerId) throw this.activeTripConflict(winnerId);
+        throw winnerId
+          ? this.activeTripConflict(winnerId)
+          : new ConflictException({
+              code: ERROR_CODES.TRIP_ALREADY_ACTIVE,
+              message: 'Driver already has a trip in progress.',
+              details: { activeTripId: null },
+            });
       }
       throw error;
     }
