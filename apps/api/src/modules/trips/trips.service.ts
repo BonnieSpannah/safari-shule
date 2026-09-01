@@ -1,7 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { paginated, buildPagination } from '../../common/pagination/pagination';
 import { requireTenantId } from '../../common/context/request-context';
+import { ERROR_CODES } from '@safari-shule/shared-types';
 import type { TripInput, PaginationQuery } from '@safari-shule/shared-types';
 
 @Injectable()
@@ -112,6 +114,8 @@ export class TripsService {
         select: { id: true },
       });
       if (!driver) throw new BadRequestException('Selected driver must be an active driver in this tenant.');
+      const activeForNewDriver = await this.findActiveTripId(trip.tenantId, nextDriverUserId, id);
+      if (activeForNewDriver) throw this.activeTripConflict(activeForNewDriver);
     }
 
     if (nextAssistantUserId !== undefined && nextAssistantUserId !== null) {
@@ -152,24 +156,65 @@ export class TripsService {
     });
   }
 
-  async start(id: string) {
-    const trip = await this.prisma.trip.findFirst({ where: { id } });
-    if (!trip) throw new NotFoundException();
-    if (trip.status !== 'scheduled') throw new BadRequestException({ code: 'TRIP_NOT_SCHEDULED' });
-    return this.prisma.trip.update({
-      where: { id },
-      data: { status: 'in_progress' as any, startedAt: new Date() },
+  private activeTripConflict(activeTripId: string): ConflictException {
+    return new ConflictException({
+      code: ERROR_CODES.TRIP_ALREADY_ACTIVE,
+      message: 'Driver already has a trip in progress.',
+      details: { activeTripId },
     });
   }
 
-  async startForAssignedDriver(id: string, driverUserId: string) {
-    const trip = await this.prisma.trip.findFirst({ where: { id, driverUserId } });
-    if (!trip) throw new NotFoundException();
-    if (trip.status !== 'scheduled') throw new BadRequestException({ code: 'TRIP_NOT_SCHEDULED' });
-    return this.prisma.trip.update({
-      where: { id },
-      data: { status: 'in_progress' as any, startedAt: new Date() },
+  private async findActiveTripId(
+    tenantId: string,
+    driverUserId: string,
+    excludeTripId?: string,
+  ): Promise<string | null> {
+    const active = await this.prisma.trip.findFirst({
+      where: {
+        tenantId,
+        driverUserId,
+        status: 'in_progress',
+        ...(excludeTripId ? { id: { not: excludeTripId } } : {}),
+      },
+      select: { id: true },
     });
+    return active?.id ?? null;
+  }
+
+  private async startTrip(id: string, assignedDriverUserId?: string) {
+    const trip = await this.prisma.trip.findFirst({
+      where: {
+        id,
+        ...(assignedDriverUserId ? { driverUserId: assignedDriverUserId } : {}),
+      },
+    });
+    if (!trip) throw new NotFoundException();
+    if (trip.status !== 'scheduled') {
+      throw new BadRequestException({ code: 'TRIP_NOT_SCHEDULED' });
+    }
+    const activeTripId = await this.findActiveTripId(trip.tenantId, trip.driverUserId, trip.id);
+    if (activeTripId) throw this.activeTripConflict(activeTripId);
+
+    try {
+      return await this.prisma.trip.update({
+        where: { id: trip.id },
+        data: { status: 'in_progress', startedAt: new Date() },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const winnerId = await this.findActiveTripId(trip.tenantId, trip.driverUserId);
+        if (winnerId) throw this.activeTripConflict(winnerId);
+      }
+      throw error;
+    }
+  }
+
+  start(id: string) {
+    return this.startTrip(id);
+  }
+
+  startForAssignedDriver(id: string, driverUserId: string) {
+    return this.startTrip(id, driverUserId);
   }
 
   async end(id: string) {
@@ -192,7 +237,7 @@ export class TripsService {
     });
   }
 
-  async cancel(id: string) {
+  async cancel(id: string, reason: string) {
     const trip = await this.prisma.trip.findFirst({ where: { id } });
     if (!trip) throw new NotFoundException();
     if (trip.status === 'completed' || trip.status === 'cancelled') {
@@ -200,7 +245,7 @@ export class TripsService {
     }
     return this.prisma.trip.update({
       where: { id },
-      data: { status: 'cancelled' as any, endedAt: new Date() },
+      data: { status: 'cancelled', endedAt: new Date(), cancellationReason: reason },
     });
   }
 }

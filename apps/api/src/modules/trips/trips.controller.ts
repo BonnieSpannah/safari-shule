@@ -115,7 +115,7 @@ export class TripsController {
   @Post(':id/cancel')
   @RequirePermission('trips.dispatch')
   @Audited({ action: 'trip.cancel', entityType: 'trip', entityIdParam: 'id' })
-  cancel(@Param('id') id: string, @ZodBody(tripCancelInput) _body: z.infer<typeof tripCancelInput>) {
-    return this.svc.cancel(id);
+  cancel(@Param('id') id: string, @ZodBody(tripCancelInput) body: z.infer<typeof tripCancelInput>) {
+    return this.svc.cancel(id, body.reason);
   }
 }

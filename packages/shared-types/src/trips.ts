@@ -16,6 +16,7 @@ export interface Trip {
   scheduledStart: string;
   startedAt: string | null;
   endedAt: string | null;
+  cancellationReason: string | null;
   status: TripStatus;
   direction: TripDirection;
 }

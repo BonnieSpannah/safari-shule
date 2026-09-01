@@ -15,6 +15,7 @@ describe('Trips — GET /v1/trips (e2e)', () => {
   let alpha: SeededTenant;
   let beta: SeededTenant;
   let alphaTripId: string;
+  let alphaSecondTripId: string;
 
   beforeAll(async () => {
     ({ app, prisma, tenantAdmin, auth } = await bootstrapTestApp());
@@ -45,6 +46,19 @@ describe('Trips — GET /v1/trips (e2e)', () => {
         },
       });
       alphaTripId = trip.id;
+
+      const trip2 = await prisma.trip.create({
+        data: {
+          tenantId: alpha.tenantId,
+          routeId: alphaRouteId,
+          vehicleId: alpha.device!.vehicleId,
+          driverUserId: alpha.driverUserId,
+          scheduledStart: new Date(),
+          direction: 'evening_dropoff',
+          status: 'scheduled',
+        },
+      });
+      alphaSecondTripId = trip2.id;
     });
   });
 
@@ -150,5 +164,135 @@ describe('Trips — GET /v1/trips (e2e)', () => {
 
     expect(location.status).toBe(201);
     expect(location.body).toEqual({ ok: true });
+  });
+
+  async function resetDriverTripsToScheduled() {
+    await runWithBypass(async () => {
+      await prisma.trip.updateMany({
+        where: { id: { in: [alphaTripId, alphaSecondTripId] } },
+        data: { status: 'scheduled' as any, startedAt: null, endedAt: null },
+      });
+    });
+  }
+
+  it('persists the validated cancellation reason', async () => {
+    await runWithBypass(() =>
+      prisma.trip.update({
+        where: { id: alphaSecondTripId },
+        data: { status: 'scheduled' as any, startedAt: null, endedAt: null },
+      }),
+    );
+
+    const response = await request(app.getHttpServer())
+      .post(`/v1/trips/${alphaSecondTripId}/cancel`)
+      .set('Authorization', `Bearer ${alpha.adminAccessToken}`)
+      .set('x-tenant-id', alpha.tenantId)
+      .send({ reason: 'Vehicle unavailable after inspection.' });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      status: 'cancelled',
+      cancellationReason: 'Vehicle unavailable after inspection.',
+    });
+  });
+
+  it('returns the active trip when the driver starts a second trip', async () => {
+    await runWithBypass(async () => {
+      await prisma.trip.update({
+        where: { id: alphaTripId },
+        data: { status: 'in_progress' as any, startedAt: new Date(), endedAt: null },
+      });
+      await prisma.trip.update({
+        where: { id: alphaSecondTripId },
+        data: { status: 'scheduled' as any, startedAt: null, endedAt: null },
+      });
+    });
+
+    const response = await request(app.getHttpServer())
+      .post(`/v1/trips/${alphaSecondTripId}/driver-start`)
+      .set('Authorization', `Bearer ${alpha.driverAccessToken}`)
+      .set('x-tenant-id', alpha.tenantId);
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      code: 'TRIP_ALREADY_ACTIVE',
+      details: { activeTripId: alphaTripId },
+    });
+  });
+
+  it('allows only one winner when two assigned trips start concurrently', async () => {
+    await resetDriverTripsToScheduled();
+
+    const responses = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/v1/trips/${alphaTripId}/driver-start`)
+        .set('Authorization', `Bearer ${alpha.driverAccessToken}`)
+        .set('x-tenant-id', alpha.tenantId),
+      request(app.getHttpServer())
+        .post(`/v1/trips/${alphaSecondTripId}/driver-start`)
+        .set('Authorization', `Bearer ${alpha.driverAccessToken}`)
+        .set('x-tenant-id', alpha.tenantId),
+    ]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
+    const activeCount = await runWithBypass(() =>
+      prisma.trip.count({
+        where: {
+          tenantId: alpha.tenantId,
+          driverUserId: alpha.driverUserId,
+          status: 'in_progress',
+        },
+      }),
+    );
+    expect(activeCount).toBe(1);
+  });
+
+  it('returns 409 when dispatch starts a trip for a driver already in progress', async () => {
+    await runWithBypass(async () => {
+      await prisma.trip.update({
+        where: { id: alphaTripId },
+        data: { status: 'in_progress' as any, startedAt: new Date(), endedAt: null },
+      });
+      await prisma.trip.update({
+        where: { id: alphaSecondTripId },
+        data: { status: 'scheduled' as any, startedAt: null, endedAt: null },
+      });
+    });
+
+    const response = await request(app.getHttpServer())
+      .post(`/v1/trips/${alphaSecondTripId}/start`)
+      .set('Authorization', `Bearer ${alpha.adminAccessToken}`)
+      .set('x-tenant-id', alpha.tenantId);
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      code: 'TRIP_ALREADY_ACTIVE',
+      details: { activeTripId: alphaTripId },
+    });
+  });
+
+  it('returns 409 when assigning an already-active driver to a scheduled trip', async () => {
+    await runWithBypass(async () => {
+      await prisma.trip.update({
+        where: { id: alphaTripId },
+        data: { status: 'in_progress' as any, startedAt: new Date(), endedAt: null },
+      });
+      await prisma.trip.update({
+        where: { id: alphaSecondTripId },
+        data: { status: 'scheduled' as any, startedAt: null, endedAt: null },
+      });
+    });
+
+    const response = await request(app.getHttpServer())
+      .patch(`/v1/trips/${alphaSecondTripId}/assignment`)
+      .set('Authorization', `Bearer ${alpha.adminAccessToken}`)
+      .set('x-tenant-id', alpha.tenantId)
+      .send({ driverUserId: alpha.driverUserId });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      code: 'TRIP_ALREADY_ACTIVE',
+      details: { activeTripId: alphaTripId },
+    });
   });
 });

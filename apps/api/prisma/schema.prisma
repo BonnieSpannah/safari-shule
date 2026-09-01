@@ -803,6 +803,7 @@ model Trip {
   scheduledStart  DateTime
   startedAt       DateTime?
   endedAt         DateTime?
+  cancellationReason String?
   status          TripStatus    @default(scheduled)
   direction       TripDirection
   createdAt       DateTime      @default(now())
