@@ -4,9 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/core/api/client.dart';
 import 'package:mobile/core/offline/outbox.dart';
 import 'package:mobile/core/telemetry/trip_telemetry_service.dart';
-import 'package:mobile/features/driver/driver_trip_map.dart';
 import 'package:mobile/features/driver/driver_trip_models.dart';
 import 'package:mobile/features/driver/driver_trip_providers.dart';
+import 'package:mobile/features/driver/trip_status_shell.dart';
 import 'package:mobile/features/driver/trip_time_format.dart';
 import 'package:uuid/uuid.dart';
 
@@ -187,6 +187,8 @@ class _InProgressTripView extends StatelessWidget {
     required this.onSendSos,
   });
 
+  static const Color _amber = Color(0xFFF59E0B);
+
   final DriverTripDetail detail;
   final Future<void> Function() onEnd;
   final VoidCallback onSendSos;
@@ -194,90 +196,20 @@ class _InProgressTripView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final latest = detail.latestSnapshot;
-    return Column(
-      children: <Widget>[
-        Expanded(
-          child: Stack(
-            children: <Widget>[
-              Positioned.fill(
-                child: DriverTripMap(
-                  policy: TripMapPolicy.from(detail),
-                  compact: false,
-                ),
-              ),
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      children: <Widget>[
-                        _CircleIconButton(
-                          icon: Icons.arrow_back,
-                          tooltip: 'Back to dashboard',
-                          onTap: () => Navigator.of(context).maybePop(),
-                        ),
-                        const SizedBox(width: 8),
-                        const Expanded(child: _InProgressBadge()),
-                        const SizedBox(width: 8),
-                        _SosButton(onPressed: onSendSos),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                left: 12,
-                right: 12,
-                top: 64,
-                child: _InfoChipsRow(
-                  elapsedLabel: detail.startedAt != null
-                      ? formatTripStarted(detail.startedAt!)
-                      : 'Elapsed time unavailable',
-                  vehicleRegistration: detail.vehicle?.registration,
-                  directionLabel: formatTripDirection(detail.direction),
-                  gpsHealthLabel: formatGpsHealth(latest?.recordedAt),
-                ),
-              ),
-            ],
-          ),
-        ),
-        _InProgressBottomPanel(detail: detail, onEnd: onEnd),
-      ],
-    );
-  }
-}
-
-class _InProgressBadge extends StatelessWidget {
-  const _InProgressBadge();
-
-  static const Color _amber = Color(0xFFF59E0B);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.all(Radius.circular(20)),
+    return TripStatusShell(
+      mapPolicy: TripMapPolicy.from(detail),
+      badgeLabel: 'In progress',
+      badgeColor: _amber,
+      topBarActions: <Widget>[_SosButton(onPressed: onSendSos)],
+      chipsRow: InfoChipsRow(
+        elapsedLabel: detail.startedAt != null
+            ? formatTripStarted(detail.startedAt!)
+            : 'Elapsed time unavailable',
+        vehicleRegistration: detail.vehicle?.registration,
+        directionLabel: formatTripDirection(detail.direction),
+        gpsHealthLabel: formatGpsHealth(latest?.recordedAt),
       ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Icon(Icons.circle, size: 10, color: _amber),
-          SizedBox(width: 6),
-          Text(
-            'In progress',
-            style: TextStyle(color: _amber, fontWeight: FontWeight.w700),
-          ),
-        ],
-      ),
+      bottomPanel: _InProgressBottomPanel(detail: detail, onEnd: onEnd),
     );
   }
 }
@@ -300,83 +232,6 @@ class _SosButton extends StatelessWidget {
         icon: const Icon(Icons.warning_amber_rounded),
         label: const Text('SOS'),
       ),
-    );
-  }
-}
-
-class _CircleIconButton extends StatelessWidget {
-  const _CircleIconButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: Theme.of(context).colorScheme.surface,
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: SizedBox(
-            width: 48,
-            height: 48,
-            child: Icon(icon, size: 22),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoChipsRow extends StatelessWidget {
-  const _InfoChipsRow({
-    required this.elapsedLabel,
-    required this.vehicleRegistration,
-    required this.directionLabel,
-    required this.gpsHealthLabel,
-  });
-
-  final String elapsedLabel;
-  final String? vehicleRegistration;
-  final String directionLabel;
-  final String gpsHealthLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: <Widget>[
-        _InfoChip(text: elapsedLabel),
-        _InfoChip(text: vehicleRegistration ?? 'Vehicle unavailable'),
-        _InfoChip(text: directionLabel),
-        _InfoChip(text: gpsHealthLabel),
-      ],
-    );
-  }
-}
-
-class _InfoChip extends StatelessWidget {
-  const _InfoChip({required this.text});
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.all(Radius.circular(16)),
-      ),
-      child: Text(text, style: Theme.of(context).textTheme.bodySmall),
     );
   }
 }
