@@ -6,12 +6,57 @@ import 'package:flutter_background_geolocation/flutter_background_geolocation.da
 import 'package:mobile/core/offline/outbox.dart';
 import 'package:uuid/uuid.dart';
 
+// Wraps the bg.BackgroundGeolocation static API so it can be faked in tests.
+abstract class TripLocationAdapter {
+  Future<void> ready(bg.Config config);
+  void onLocation(void Function(bg.Location location) callback);
+  Future<void> start();
+  Future<void> stop();
+  Future<void> removeListeners();
+}
+
+class _BackgroundGeolocationAdapter implements TripLocationAdapter {
+  const _BackgroundGeolocationAdapter();
+
+  @override
+  Future<void> ready(bg.Config config) async {
+    await bg.BackgroundGeolocation.ready(config);
+  }
+
+  @override
+  void onLocation(void Function(bg.Location location) callback) {
+    bg.BackgroundGeolocation.onLocation(callback);
+  }
+
+  @override
+  Future<void> start() async {
+    await bg.BackgroundGeolocation.start();
+  }
+
+  @override
+  Future<void> stop() async {
+    await bg.BackgroundGeolocation.stop();
+  }
+
+  @override
+  Future<void> removeListeners() async {
+    await bg.BackgroundGeolocation.removeListeners();
+  }
+}
+
 class TripTelemetryService {
-  TripTelemetryService({required Dio client}) : _client = client;
+  TripTelemetryService({required Dio client, TripLocationAdapter? adapter})
+    : _client = client,
+      _adapter = adapter ?? const _BackgroundGeolocationAdapter();
 
   final Dio _client;
+  final TripLocationAdapter _adapter;
   Timer? _fallbackTimer;
   bg.Coords? _lastCoords;
+  String? _activeTripId;
+
+  // The trip currently being tracked, or null when telemetry is stopped.
+  String? get activeTripId => _activeTripId;
 
   // Test-friendly shape; keeps the plugin's Coords type out of the public API.
   ({double lat, double lng})? get lastKnownLocation {
@@ -20,9 +65,14 @@ class TripTelemetryService {
   }
 
   Future<void> start(String tripId) async {
-    await stop();
+    if (_activeTripId == tripId) {
+      return;
+    }
+    if (_activeTripId != null) {
+      await stop();
+    }
 
-    await bg.BackgroundGeolocation.ready(
+    await _adapter.ready(
       bg.Config(
         desiredAccuracy: bg.Config.DESIRED_ACCURACY_NAVIGATION,
         distanceFilter: 25,
@@ -31,12 +81,12 @@ class TripTelemetryService {
       ),
     );
 
-    bg.BackgroundGeolocation.onLocation((location) {
+    _adapter.onLocation((location) {
       _lastCoords = location.coords;
       unawaited(_postLocation(tripId, location.coords));
     });
 
-    await bg.BackgroundGeolocation.start();
+    await _adapter.start();
 
     _fallbackTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       final coords = _lastCoords;
@@ -44,13 +94,16 @@ class TripTelemetryService {
         unawaited(_postLocation(tripId, coords));
       }
     });
+
+    _activeTripId = tripId;
   }
 
   Future<void> stop() async {
     _fallbackTimer?.cancel();
     _fallbackTimer = null;
-    bg.BackgroundGeolocation.removeListeners();
-    await bg.BackgroundGeolocation.stop();
+    await _adapter.removeListeners();
+    await _adapter.stop();
+    _activeTripId = null;
   }
 
   Future<void> _postLocation(String tripId, bg.Coords coords) async {
