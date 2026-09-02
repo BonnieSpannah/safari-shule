@@ -581,6 +581,38 @@ void main() {
     );
   });
 
+  group('cancelled trip screen', () {
+    testWidgets(
+      'cancelled trip view shows cancellation reason and no actions',
+      (WidgetTester tester) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              apiClientProvider.overrideWithValue(
+                _dioReturning((_) {
+                  final data = _tripDetailResponse('trip-cancelled', 'cancelled');
+                  data['cancellationReason'] = 'Vehicle breakdown';
+                  return data;
+                }),
+              ),
+            ],
+            child: const MaterialApp(
+              home: DriverTripScreen(tripId: 'trip-cancelled'),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Cancelled'), findsOneWidget);
+        expect(find.textContaining('Vehicle breakdown'), findsOneWidget);
+        expect(find.byType(FilledButton), findsNothing);
+        expect(find.byType(ElevatedButton), findsNothing);
+        final map = tester.widget<DriverTripMap>(find.byType(DriverTripMap));
+        expect(map.compact, isFalse);
+      },
+    );
+  });
+
   testWidgets('driver start and end trip call endpoints and update status', (
     WidgetTester tester,
   ) async {

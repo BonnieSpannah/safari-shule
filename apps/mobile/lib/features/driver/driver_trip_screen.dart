@@ -125,28 +125,14 @@ class _TripDetailContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (detail.status == DriverTripStatus.inProgress) {
-      return _InProgressTripView(detail: detail, onEnd: onEnd, onSendSos: onSendSos);
-    }
-    if (detail.status == DriverTripStatus.scheduled) {
-      return _ScheduledTripView(detail: detail, onStart: onStart);
-    }
-    if (detail.status == DriverTripStatus.completed) {
-      return _CompletedTripView(detail: detail);
-    }
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Text(detail.routeName, style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          Text('Trip status: ${detail.status.name}'),
-          Text('Direction: ${detail.direction}'),
-          Text('Passengers expected: ${detail.passengerSummary.expected}'),
-        ],
-      ),
-    );
+    return switch (detail.status) {
+      DriverTripStatus.scheduled =>
+        _ScheduledTripView(detail: detail, onStart: onStart),
+      DriverTripStatus.inProgress =>
+        _InProgressTripView(detail: detail, onEnd: onEnd, onSendSos: onSendSos),
+      DriverTripStatus.completed => _CompletedTripView(detail: detail),
+      DriverTripStatus.cancelled => _CancelledTripView(detail: detail),
+    };
   }
 }
 
@@ -197,11 +183,11 @@ class _ScheduledInfoColumn extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: <Widget>[
-            _ScheduledInfoChip(text: formatTripSchedule(detail.scheduledStart)),
-            _ScheduledInfoChip(
+            _TripInfoChip(text: formatTripSchedule(detail.scheduledStart)),
+            _TripInfoChip(
               text: 'Passengers expected: ${detail.passengerSummary.expected}',
             ),
-            _ScheduledInfoChip(text: formatTripDirection(detail.direction)),
+            _TripInfoChip(text: formatTripDirection(detail.direction)),
           ],
         ),
       ],
@@ -209,8 +195,8 @@ class _ScheduledInfoColumn extends StatelessWidget {
   }
 }
 
-class _ScheduledInfoChip extends StatelessWidget {
-  const _ScheduledInfoChip({required this.text});
+class _TripInfoChip extends StatelessWidget {
+  const _TripInfoChip({required this.text});
   final String text;
 
   @override
@@ -312,15 +298,15 @@ class _CompletedTripView extends StatelessWidget {
         spacing: 8,
         runSpacing: 8,
         children: <Widget>[
-          _ScheduledInfoChip(
+          _TripInfoChip(
             text: duration != null
                 ? '${duration.inMinutes} min'
                 : 'Duration unavailable',
           ),
-          _ScheduledInfoChip(
+          _TripInfoChip(
             text: detail.vehicle?.registration ?? 'Vehicle unavailable',
           ),
-          _ScheduledInfoChip(text: formatTripDirection(detail.direction)),
+          _TripInfoChip(text: formatTripDirection(detail.direction)),
         ],
       ),
       bottomPanel: Material(
@@ -353,9 +339,48 @@ class _CompletedTripView extends StatelessWidget {
   }
 }
 
-// Loading, retry, and cancelled detail share the plain text layout above;
-// scheduled uses _ScheduledTripView, completed uses _CompletedTripView, and
-// in_progress uses this shell.
+class _CancelledTripView extends StatelessWidget {
+  const _CancelledTripView({required this.detail});
+
+  final DriverTripDetail detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return TripStatusShell(
+      mapPolicy: TripMapPolicy.from(detail),
+      badgeLabel: 'Cancelled',
+      badgeColor: Colors.redAccent,
+      chipsRow: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: <Widget>[
+          _TripInfoChip(text: formatTripSchedule(detail.scheduledStart)),
+          _TripInfoChip(text: formatTripDirection(detail.direction)),
+        ],
+      ),
+      bottomPanel: Material(
+        color: Theme.of(context).colorScheme.surface,
+        elevation: 8,
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              (detail.cancellationReason?.isNotEmpty ?? false)
+                  ? 'Cancelled: ${detail.cancellationReason}'
+                  : 'This trip was cancelled.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Loading and retry states are handled above in DriverTripScreen before
+// _TripDetailContent is ever built; every DriverTripStatus value has its
+// own view here, dispatched exhaustively in _TripDetailContent.build().
 class _InProgressTripView extends StatelessWidget {
   const _InProgressTripView({
     required this.detail,
