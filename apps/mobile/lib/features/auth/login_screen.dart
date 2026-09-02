@@ -61,49 +61,122 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final loading = state.isLoading;
     final errorMessage = _errorMessage ??
       (state.hasError ? apiErrorMessage(state.error!) : null);
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Safari Shule Login')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: <Widget>[
-            TextField(
-              key: const Key('login-email'),
-              controller: _email,
-              decoration: const InputDecoration(labelText: 'Email'),
-            ),
-            TextField(
-              key: const Key('login-password'),
-              controller: _password,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Password'),
-            ),
-            TextField(
-              key: const Key('login-tenant'),
-              controller: _tenant,
-              decoration: const InputDecoration(labelText: 'Tenant slug'),
-            ),
-            const SizedBox(height: 16),
-            if (errorMessage != null)
-              Text(
-                errorMessage,
-                key: const Key('login-error'),
-                style: const TextStyle(color: Colors.red),
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        Icon(
+                          Icons.directions_bus_filled_rounded,
+                          size: 56,
+                          color: colorScheme.primary,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Safari Shule',
+                          textAlign: TextAlign.center,
+                          style: textTheme.headlineMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Safari Shule Login',
+                          textAlign: TextAlign.center,
+                          style: textTheme.bodyMedium
+                              ?.copyWith(color: Colors.grey),
+                        ),
+                        const SizedBox(height: 32),
+                        Card(
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            side: BorderSide(color: colorScheme.outlineVariant),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: <Widget>[
+                                TextField(
+                                  key: const Key('login-tenant'),
+                                  controller: _tenant,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Tenant slug',
+                                    prefixIcon: Icon(Icons.apartment_outlined),
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  key: const Key('login-email'),
+                                  controller: _email,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Email',
+                                    prefixIcon: Icon(Icons.email_outlined),
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  key: const Key('login-password'),
+                                  controller: _password,
+                                  obscureText: true,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Password',
+                                    prefixIcon: Icon(Icons.lock_outline),
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                                if (errorMessage != null) ...<Widget>[
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    errorMessage,
+                                    key: const Key('login-error'),
+                                    style: TextStyle(color: colorScheme.error),
+                                  ),
+                                ],
+                                const SizedBox(height: 24),
+                                SizedBox(
+                                  height: 48,
+                                  child: FilledButton(
+                                    key: const Key('login-submit'),
+                                    onPressed: loading ? null : _submit,
+                                    child: loading
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.white,
+                                            ),
+                                          )
+                                        : const Text('Sign in'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            if (errorMessage != null) const SizedBox(height: 8),
-            ElevatedButton(
-              key: const Key('login-submit'),
-              onPressed: loading ? null : _submit,
-              child: loading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Sign in'),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
