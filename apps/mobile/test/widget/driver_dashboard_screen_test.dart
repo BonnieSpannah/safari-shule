@@ -319,8 +319,20 @@ void main() {
         expect(elapsedPos.dx, greaterThan(statusPos.dx));
         expect(elapsedPos.dy, closeTo(statusPos.dy, 4));
 
-        final vehiclePos = tester.getTopLeft(find.text('KCA 123A'));
-        final directionPos = tester.getTopLeft(find.text('Outbound'));
+        // 'KCA 123A'/'Outbound' also appear in the compact upcoming row, so scope to the active card's key.
+        final activeCard = find.byKey(const Key('driver-active-trip'));
+        final vehicleFinder = find.descendant(
+          of: activeCard,
+          matching: find.text('KCA 123A'),
+        );
+        final directionFinder = find.descendant(
+          of: activeCard,
+          matching: find.text('Outbound'),
+        );
+        expect(vehicleFinder, findsOneWidget);
+        expect(directionFinder, findsOneWidget);
+        final vehiclePos = tester.getTopLeft(vehicleFinder);
+        final directionPos = tester.getTopLeft(directionFinder);
         expect(directionPos.dx, greaterThan(vehiclePos.dx));
         expect(directionPos.dy, closeTo(vehiclePos.dy, 4));
       },
@@ -433,6 +445,56 @@ void main() {
 
       expect(find.text('Start'), findsNothing);
       expect(find.text('Start trip'), findsNothing);
+    });
+  });
+
+  group('DriverDashboardScreen — upcoming row layout', () {
+    testWidgets('compact trip row shows time left, vehicle + direction right', (
+      WidgetTester tester,
+    ) async {
+      final workspace = _activeWorkspace();
+      final detail = _makeDetail();
+      final upcomingSummary = workspace.upcomingTrips.single;
+
+      await tester.pumpWidget(
+        _wrap(
+          const DriverDashboardScreen(),
+          overrides: [
+            driverWorkspaceProvider.overrideWith((_) async => workspace),
+            driverTripDetailProvider(
+              'trip-active',
+            ).overrideWith((_) async => detail),
+          ],
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      // Scope to the compact row's own key: 'KCA 123A' also appears on the active trip card.
+      final row = find.byKey(Key('driver-upcoming-trip-${upcomingSummary.id}'));
+      final timeFinder = find.descendant(
+        of: row,
+        matching: find.text(formatTripSchedule(upcomingSummary.scheduledStart)),
+      );
+      final vehicleFinder = find.descendant(
+        of: row,
+        matching: find.text('KCA 123A'),
+      );
+      final directionFinder = find.descendant(
+        of: row,
+        matching: find.text('Inbound'),
+      );
+
+      expect(timeFinder, findsOneWidget);
+      expect(vehicleFinder, findsOneWidget);
+      expect(directionFinder, findsOneWidget);
+
+      final timeX = tester.getTopLeft(timeFinder).dx;
+      final vehicleX = tester.getTopLeft(vehicleFinder).dx;
+      final directionX = tester.getTopLeft(directionFinder).dx;
+
+      expect(timeX, lessThan(vehicleX));
+      expect(vehicleX, lessThan(directionX));
     });
   });
 

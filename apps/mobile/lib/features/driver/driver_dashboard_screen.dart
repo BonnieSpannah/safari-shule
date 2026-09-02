@@ -379,6 +379,7 @@ class _CompactTripRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
+      key: Key('driver-upcoming-trip-${summary.id}'),
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
         color: Theme.of(context).colorScheme.surfaceContainerLow,
@@ -398,9 +399,23 @@ class _CompactTripRow extends StatelessWidget {
                         summary.route.name,
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
-                      Text(
-                        formatTripSchedule(summary.scheduledStart),
-                        style: Theme.of(context).textTheme.bodySmall,
+                      Row(
+                        children: <Widget>[
+                          Text(
+                            formatTripSchedule(summary.scheduledStart),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          const Spacer(),
+                          Text(
+                            summary.vehicle.registration,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            formatTripDirection(summary.direction),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
                       ),
                     ],
                   ),
