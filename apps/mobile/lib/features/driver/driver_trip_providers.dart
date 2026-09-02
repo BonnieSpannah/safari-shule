@@ -72,3 +72,27 @@ final endDriverTripProvider =
     return detail;
   };
 });
+
+// Boards a student onto a trip by admission number. Invalidates trip detail on success.
+final boardStudentProvider =
+    Provider<Future<void> Function(String, String)>((ref) {
+  return (String tripId, String admissionNumber) async {
+    await ref.read(apiClientProvider).post<void>(
+      '/trips/$tripId/board',
+      data: <String, Object?>{'admissionNumber': admissionNumber},
+    );
+    ref.invalidate(driverTripDetailProvider(tripId));
+  };
+});
+
+// Alights a student from a trip by admission number. Invalidates trip detail on success.
+final alightStudentProvider =
+    Provider<Future<void> Function(String, String)>((ref) {
+  return (String tripId, String admissionNumber) async {
+    await ref.read(apiClientProvider).post<void>(
+      '/trips/$tripId/alight',
+      data: <String, Object?>{'admissionNumber': admissionNumber},
+    );
+    ref.invalidate(driverTripDetailProvider(tripId));
+  };
+});
