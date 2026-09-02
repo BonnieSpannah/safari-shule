@@ -131,6 +131,9 @@ class _TripDetailContent extends StatelessWidget {
     if (detail.status == DriverTripStatus.scheduled) {
       return _ScheduledTripView(detail: detail, onStart: onStart);
     }
+    if (detail.status == DriverTripStatus.completed) {
+      return _CompletedTripView(detail: detail);
+    }
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -291,8 +294,68 @@ class _StartTripConfirmationSheet extends StatelessWidget {
   }
 }
 
-// Loading, retry, completed, and cancelled detail share the plain text layout
-// above; scheduled uses _ScheduledTripView and in_progress uses this shell.
+class _CompletedTripView extends StatelessWidget {
+  const _CompletedTripView({required this.detail});
+
+  final DriverTripDetail detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final duration = (detail.startedAt != null && detail.endedAt != null)
+        ? detail.endedAt!.difference(detail.startedAt!)
+        : null;
+    return TripStatusShell(
+      mapPolicy: TripMapPolicy.from(detail),
+      badgeLabel: 'Completed',
+      badgeColor: Colors.green,
+      chipsRow: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: <Widget>[
+          _ScheduledInfoChip(
+            text: duration != null
+                ? '${duration.inMinutes} min'
+                : 'Duration unavailable',
+          ),
+          _ScheduledInfoChip(
+            text: detail.vehicle?.registration ?? 'Vehicle unavailable',
+          ),
+          _ScheduledInfoChip(text: formatTripDirection(detail.direction)),
+        ],
+      ),
+      bottomPanel: Material(
+        color: Theme.of(context).colorScheme.surface,
+        elevation: 8,
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: _CountTile(
+                    label: 'Boarded',
+                    value: detail.passengerSummary.boarded,
+                  ),
+                ),
+                Expanded(
+                  child: _CountTile(
+                    label: 'Alighted',
+                    value: detail.passengerSummary.alighted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Loading, retry, and cancelled detail share the plain text layout above;
+// scheduled uses _ScheduledTripView, completed uses _CompletedTripView, and
+// in_progress uses this shell.
 class _InProgressTripView extends StatelessWidget {
   const _InProgressTripView({
     required this.detail,

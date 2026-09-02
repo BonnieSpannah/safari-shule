@@ -542,6 +542,45 @@ void main() {
     );
   });
 
+  group('completed trip screen', () {
+    testWidgets(
+      'completed trip view shows travelled route, duration, and passenger totals with no actions',
+      (WidgetTester tester) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              apiClientProvider.overrideWithValue(
+                _dioReturning(
+                  (_) => _tripDetailResponse(
+                    'trip-done',
+                    'completed',
+                    passengerSummary: <String, Object?>{
+                      'expected': 12,
+                      'boarded': 11,
+                      'onBoard': 0,
+                      'alighted': 11,
+                    },
+                  ),
+                ),
+              ),
+            ],
+            child: const MaterialApp(
+              home: DriverTripScreen(tripId: 'trip-done'),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Completed'), findsOneWidget);
+        expect(find.textContaining('Boarded'), findsOneWidget);
+        expect(find.byType(FilledButton), findsNothing);
+        expect(find.byType(ElevatedButton), findsNothing);
+        final map = tester.widget<DriverTripMap>(find.byType(DriverTripMap));
+        expect(map.compact, isFalse);
+      },
+    );
+  });
+
   testWidgets('driver start and end trip call endpoints and update status', (
     WidgetTester tester,
   ) async {
@@ -624,7 +663,7 @@ void main() {
 
     expect(requests.contains('POST /trips/trip-123/driver-end'), isTrue);
     expect(telemetry.stopped, isTrue);
-    expect(find.text('Trip status: completed'), findsOneWidget);
+    expect(find.text('Completed'), findsOneWidget);
   });
 
   testWidgets('driver SOS failure queues outbox entry', (
