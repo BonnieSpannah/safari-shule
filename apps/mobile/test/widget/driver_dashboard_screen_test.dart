@@ -389,12 +389,19 @@ void main() {
       'earliest upcoming is primary, shows View route, no Resume trip',
       (WidgetTester tester) async {
         final workspace = _noActiveWorkspace();
+        final detail = _makeDetail(
+          id: 'trip-next',
+          status: DriverTripStatus.scheduled,
+        );
 
         await tester.pumpWidget(
           _wrap(
             const DriverDashboardScreen(),
             overrides: [
               driverWorkspaceProvider.overrideWith((_) async => workspace),
+              driverTripDetailProvider(
+                'trip-next',
+              ).overrideWith((_) async => detail),
             ],
           ),
         );
@@ -412,12 +419,19 @@ void main() {
       WidgetTester tester,
     ) async {
       final workspace = _noActiveWorkspace();
+      final detail = _makeDetail(
+        id: 'trip-next',
+        status: DriverTripStatus.scheduled,
+      );
 
       await tester.pumpWidget(
         _wrap(
           const DriverDashboardScreen(),
           overrides: [
             driverWorkspaceProvider.overrideWith((_) async => workspace),
+            driverTripDetailProvider(
+              'trip-next',
+            ).overrideWith((_) async => detail),
           ],
         ),
       );
@@ -431,12 +445,19 @@ void main() {
       WidgetTester tester,
     ) async {
       final workspace = _noActiveWorkspace();
+      final detail = _makeDetail(
+        id: 'trip-next',
+        status: DriverTripStatus.scheduled,
+      );
 
       await tester.pumpWidget(
         _wrap(
           const DriverDashboardScreen(),
           overrides: [
             driverWorkspaceProvider.overrideWith((_) async => workspace),
+            driverTripDetailProvider(
+              'trip-next',
+            ).overrideWith((_) async => detail),
           ],
         ),
       );
@@ -446,6 +467,60 @@ void main() {
       expect(find.text('Start'), findsNothing);
       expect(find.text('Start trip'), findsNothing);
     });
+
+    testWidgets(
+      'next trip card shows map preview and expected passenger count',
+      (WidgetTester tester) async {
+        final workspace = _noActiveWorkspace();
+        final upcomingSummary = workspace.upcomingTrips.first;
+        final detail = _makeDetail(
+          id: 'trip-next',
+          status: DriverTripStatus.scheduled,
+        );
+
+        await tester.pumpWidget(
+          _wrap(
+            const DriverDashboardScreen(),
+            overrides: [
+              driverWorkspaceProvider.overrideWith((_) async => workspace),
+              driverTripDetailProvider(
+                'trip-next',
+              ).overrideWith((_) async => detail),
+            ],
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+
+        final nextCard = find.byKey(const Key('driver-next-trip'));
+        expect(
+          find.descendant(
+            of: nextCard,
+            matching: find.byKey(const Key('driver-active-map-preview')),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.text(
+            'Passengers expected: ${detail.passengerSummary.expected}',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.text(formatTripSchedule(upcomingSummary.scheduledStart)),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: nextCard,
+            matching: find.text(
+              formatTripDirection(upcomingSummary.direction),
+            ),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
   });
 
   group('DriverDashboardScreen — upcoming row layout', () {

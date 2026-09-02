@@ -317,13 +317,13 @@ class _CompactMapPreview extends StatelessWidget {
 
 // ── Next trip card (no active trip) ───────────────────────────────────────
 
-class _NextTripCard extends StatelessWidget {
+class _NextTripCard extends ConsumerWidget {
   const _NextTripCard({required this.summary});
   final DriverTripSummary summary;
 
   @override
-  Widget build(BuildContext context) {
-    final timeLabel = formatTripSchedule(summary.scheduledStart);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final detailAsync = ref.watch(driverTripDetailProvider(summary.id));
 
     return Card(
       key: const Key('driver-next-trip'),
@@ -338,7 +338,7 @@ class _NextTripCard extends StatelessWidget {
                 const Icon(Icons.schedule, size: 14, color: Colors.grey),
                 const SizedBox(width: 4),
                 Text(
-                  timeLabel,
+                  formatTripSchedule(summary.scheduledStart),
                   style: const TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               ],
@@ -350,11 +350,31 @@ class _NextTripCard extends StatelessWidget {
                 context,
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
-            Text(
-              summary.vehicle.registration,
-              style: Theme.of(context).textTheme.bodySmall,
+            Row(
+              children: <Widget>[
+                Text(
+                  summary.vehicle.registration,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const Spacer(),
+                Text(
+                  formatTripDirection(summary.direction),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
             ),
             const SizedBox(height: 10),
+            _CompactMapPreview(detailAsync: detailAsync),
+            const SizedBox(height: 6),
+            detailAsync.when(
+              data: (d) => Text(
+                'Passengers expected: ${d.passengerSummary.expected}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              loading: () => const SizedBox.shrink(),
+              error: (_, _) => const SizedBox.shrink(),
+            ),
+            const SizedBox(height: 12),
             SizedBox(
               height: _actionHeight,
               child: OutlinedButton.icon(
