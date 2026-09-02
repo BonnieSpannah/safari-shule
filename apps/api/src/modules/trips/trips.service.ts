@@ -1,14 +1,21 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma, TripStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { paginated, buildPagination } from '../../common/pagination/pagination';
 import { requireTenantId } from '../../common/context/request-context';
+import { CommunicationsService } from '../../comms/communications.service';
+import { renderTemplate } from '../../comms/templates/registry';
 import { ERROR_CODES } from '@safari-shule/shared-types';
 import type { TripInput, PaginationQuery } from '@safari-shule/shared-types';
 
 @Injectable()
 export class TripsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(TripsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly comms: CommunicationsService,
+  ) {}
 
   async driverWorkspace(driverUserId: string) {
     const tenantId = requireTenantId();
@@ -406,4 +413,106 @@ export class TripsService {
       data: { status: 'cancelled', endedAt: new Date(), cancellationReason: reason },
     });
   }
+
+  private async loadOwnedTrip(tripId: string, driverUserId: string) {
+    const tenantId = requireTenantId();
+    const trip = await this.prisma.trip.findFirst({ where: { id: tripId, driverUserId, tenantId } });
+    if (!trip) throw new NotFoundException();
+    return trip;
+  }
+
+  private async findStudentByAdmissionNumber(tenantId: string, admissionNumber: string) {
+    const student = await this.prisma.student.findFirst({
+      where: { tenantId, admissionNumber },
+      select: { id: true },
+    });
+    if (!student) throw new NotFoundException({ code: ERROR_CODES.STUDENT_NOT_ON_TRIP });
+    return student;
+  }
+
+  async boardPassenger(tripId: string, driverUserId: string, admissionNumber: string) {
+    const trip = await this.loadOwnedTrip(tripId, driverUserId);
+    if (trip.status !== 'scheduled' && trip.status !== 'in_progress') {
+      throw new BadRequestException({ code: ERROR_CODES.TRIP_NOT_BOARDABLE });
+    }
+    const student = await this.findStudentByAdmissionNumber(trip.tenantId, admissionNumber);
+    const passenger = await this.prisma.tripPassenger.findFirst({
+      where: { tenantId: trip.tenantId, tripId, studentId: student.id },
+    });
+    if (!passenger) throw new NotFoundException({ code: ERROR_CODES.STUDENT_NOT_ON_TRIP });
+    if (passenger.boardedAt) throw new ConflictException({ code: ERROR_CODES.ALREADY_BOARDED });
+
+    const updated = await this.prisma.tripPassenger.update({
+      where: { id: passenger.id },
+      data: { boardedAt: new Date() },
+    });
+    try {
+      await this.notifyParents(trip.tenantId, student.id, 'boarding', trip.vehicleId);
+    } catch (err) {
+      this.logger.error({ err }, 'notifyParents failed after board');
+    }
+    return {
+      tripPassengerId: updated.id,
+      studentId: student.id,
+      boardedAt: updated.boardedAt!.toISOString(),
+    };
+  }
+
+  async alightPassenger(tripId: string, driverUserId: string, admissionNumber: string) {
+    const trip = await this.loadOwnedTrip(tripId, driverUserId);
+    if (trip.status !== 'in_progress') throw new BadRequestException({ code: ERROR_CODES.TRIP_NOT_IN_PROGRESS });
+    const student = await this.findStudentByAdmissionNumber(trip.tenantId, admissionNumber);
+    const passenger = await this.prisma.tripPassenger.findFirst({
+      where: { tenantId: trip.tenantId, tripId, studentId: student.id },
+    });
+    if (!passenger) throw new NotFoundException({ code: ERROR_CODES.STUDENT_NOT_ON_TRIP });
+    if (!passenger.boardedAt) throw new BadRequestException({ code: ERROR_CODES.NOT_BOARDED_YET });
+    if (passenger.alightedAt) throw new ConflictException({ code: ERROR_CODES.ALREADY_ALIGHTED });
+
+    const updated = await this.prisma.tripPassenger.update({
+      where: { id: passenger.id },
+      data: { alightedAt: new Date() },
+    });
+    try {
+      await this.notifyParents(trip.tenantId, student.id, 'alighting', trip.vehicleId);
+    } catch (err) {
+      this.logger.error({ err }, 'notifyParents failed after alight');
+    }
+    return {
+      tripPassengerId: updated.id,
+      studentId: student.id,
+      alightedAt: updated.alightedAt!.toISOString(),
+    };
+  }
+
+  private async notifyParents(
+    tenantId: string,
+    studentId: string,
+    direction: 'boarding' | 'alighting',
+    vehicleId: string,
+  ) {
+    const student = await this.prisma.student.findFirstOrThrow({ where: { id: studentId, tenantId } });
+    const vehicle = await this.prisma.vehicle.findFirst({ where: { id: vehicleId, tenantId } });
+    const tpl = renderTemplate(direction === 'boarding' ? 'student.boarded' : 'student.alighted', {
+      studentName: student.legalName,
+      vehicleReg: vehicle?.registration ?? 'unknown',
+      time: new Date().toISOString(),
+      location: '',
+    });
+    const links = await this.prisma.parentStudent.findMany({
+      where: { studentId, tenantId },
+      include: { parent: true },
+    });
+    for (const link of links) {
+      if (link.parent.phoneE164) {
+        await this.comms.sendSms({
+          tenantId,
+          to: link.parent.phoneE164,
+          templateId: direction === 'boarding' ? 'student.boarded' : 'student.alighted',
+          body: tpl.body,
+        });
+      }
+    }
+  }
 }
+

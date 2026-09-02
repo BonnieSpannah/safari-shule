@@ -6,6 +6,7 @@ import {
   tripInput,
   tripCancelInput,
   paginationQuery,
+  tripPassengerLookupInput,
   TRIP_STATUSES,
 } from '@safari-shule/shared-types';
 import { RequirePermission } from '../../rbac/permission.decorators';
@@ -129,5 +130,27 @@ export class TripsController {
   @Audited({ action: 'trip.cancel', entityType: 'trip', entityIdParam: 'id' })
   cancel(@Param('id') id: string, @ZodBody(tripCancelInput) body: z.infer<typeof tripCancelInput>) {
     return this.svc.cancel(id, body.reason);
+  }
+
+  @Post(':id/board')
+  @RequirePermission('attendance.override')
+  @Audited({ action: 'trip.passenger_board', entityType: 'trip', entityIdParam: 'id' })
+  board(
+    @Param('id') id: string,
+    @ZodBody(tripPassengerLookupInput) body: z.infer<typeof tripPassengerLookupInput>,
+    @Req() req: Request,
+  ) {
+    return this.svc.boardPassenger(id, requireAuthenticatedUserId(req), body.admissionNumber);
+  }
+
+  @Post(':id/alight')
+  @RequirePermission('attendance.override')
+  @Audited({ action: 'trip.passenger_alight', entityType: 'trip', entityIdParam: 'id' })
+  alight(
+    @Param('id') id: string,
+    @ZodBody(tripPassengerLookupInput) body: z.infer<typeof tripPassengerLookupInput>,
+    @Req() req: Request,
+  ) {
+    return this.svc.alightPassenger(id, requireAuthenticatedUserId(req), body.admissionNumber);
   }
 }

@@ -210,7 +210,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, readonly PermissionKey[]>
     'fuel_logs.view', 'fuel_logs.create',
     'repair_logs.view', 'repair_logs.create',
     'trips.view', 'trips.live_track',
-    'attendance.view',
+    'attendance.view', 'attendance.override',
     'incidents.view', 'incidents.report',
   ],
   assistant: [

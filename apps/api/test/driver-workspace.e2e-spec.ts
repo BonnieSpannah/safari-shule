@@ -4,6 +4,7 @@ import request from 'supertest';
 import { PrismaService } from '../src/common/prisma/prisma.service';
 import { TenantAdminService } from '../src/modules/tenant-admin/tenant-admin.service';
 import { AuthService } from '../src/auth/auth.service';
+import { CommunicationsService } from '../src/comms/communications.service';
 import { runWithBypass } from '../src/common/context/request-context';
 import { bootstrapTestApp, cleanupTenant, seedTenantWithRoles, SeededTenant } from './helpers';
 
@@ -408,6 +409,169 @@ describe('Driver workspace (e2e)', () => {
         .set('Authorization', `Bearer ${alpha.driverAccessToken}`)
         .set('x-tenant-id', alpha.tenantId)
         .expect(404);
+    });
+  });
+
+  // ─── POST /v1/trips/:id/board & /alight ─────────────────────────────────────
+  describe('POST /v1/trips/:id/board and /v1/trips/:id/alight', () => {
+    let freshStudentAdmissionNumber: string;
+
+    beforeAll(async () => {
+      freshStudentAdmissionNumber = `STU-BOARD-${randomBytes(3).toString('hex')}`;
+      await runWithBypass(async () => {
+        const student = await prisma.student.create({
+          data: {
+            tenantId: alpha.tenantId,
+            admissionNumber: freshStudentAdmissionNumber,
+            legalName: 'Fresh Boarder',
+            dateOfBirth: new Date('2016-01-01'),
+            gender: 'female',
+          },
+        });
+        await prisma.tripPassenger.create({
+          data: {
+            tenantId: alpha.tenantId,
+            tripId: activeTripId,
+            studentId: student.id,
+            expected: true,
+          },
+        });
+      });
+    });
+
+    it('boards then alights an expected passenger', async () => {
+      const boardRes = await request(app.getHttpServer())
+        .post(`/v1/trips/${activeTripId}/board`)
+        .set('Authorization', `Bearer ${alpha.driverAccessToken}`)
+        .set('x-tenant-id', alpha.tenantId)
+        .send({ admissionNumber: freshStudentAdmissionNumber })
+        .expect(201);
+      expect(boardRes.body.boardedAt).toBeTruthy();
+      expect(boardRes.body.studentId).toBeTruthy();
+
+      const doubleBoard = await request(app.getHttpServer())
+        .post(`/v1/trips/${activeTripId}/board`)
+        .set('Authorization', `Bearer ${alpha.driverAccessToken}`)
+        .set('x-tenant-id', alpha.tenantId)
+        .send({ admissionNumber: freshStudentAdmissionNumber })
+        .expect(409);
+      expect(doubleBoard.body.code).toBe('ALREADY_BOARDED');
+
+      const alightRes = await request(app.getHttpServer())
+        .post(`/v1/trips/${activeTripId}/alight`)
+        .set('Authorization', `Bearer ${alpha.driverAccessToken}`)
+        .set('x-tenant-id', alpha.tenantId)
+        .send({ admissionNumber: freshStudentAdmissionNumber })
+        .expect(201);
+      expect(alightRes.body.alightedAt).toBeTruthy();
+    });
+
+    it('rejects boarding a student who is not on the trip manifest with 404 STUDENT_NOT_ON_TRIP', async () => {
+      const otherAdmissionNumber = `STU-NOTONTRIP-${randomBytes(3).toString('hex')}`;
+      await runWithBypass(() =>
+        prisma.student.create({
+          data: {
+            tenantId: alpha.tenantId,
+            admissionNumber: otherAdmissionNumber,
+            legalName: 'Not Onboard',
+            dateOfBirth: new Date('2015-01-01'),
+            gender: 'male',
+          },
+        }),
+      );
+
+      const res = await request(app.getHttpServer())
+        .post(`/v1/trips/${activeTripId}/board`)
+        .set('Authorization', `Bearer ${alpha.driverAccessToken}`)
+        .set('x-tenant-id', alpha.tenantId)
+        .send({ admissionNumber: otherAdmissionNumber })
+        .expect(404);
+      expect(res.body.code).toBe('STUDENT_NOT_ON_TRIP');
+    });
+
+    it('returns 404 (not 403) when a driver who does not own the trip attempts to board', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/v1/trips/${otherDriverTripId}/board`)
+        .set('Authorization', `Bearer ${alpha.driverAccessToken}`)
+        .set('x-tenant-id', alpha.tenantId)
+        .send({ admissionNumber: freshStudentAdmissionNumber })
+        .expect(404);
+      expect(res.body).toEqual({ statusCode: 404, message: 'Not Found' });
+    });
+
+    it('still returns 201 for a successful board when parent notification throws', async () => {
+      const notifyAdmissionNumber = `STU-NOTIFYFAIL-${randomBytes(3).toString('hex')}`;
+      await runWithBypass(async () => {
+        const student = await prisma.student.create({
+          data: {
+            tenantId: alpha.tenantId,
+            admissionNumber: notifyAdmissionNumber,
+            legalName: 'Notify Fail Student',
+            dateOfBirth: new Date('2016-02-01'),
+            gender: 'male',
+          },
+        });
+        await prisma.tripPassenger.create({
+          data: {
+            tenantId: alpha.tenantId,
+            tripId: activeTripId,
+            studentId: student.id,
+            expected: true,
+          },
+        });
+        const parent = await prisma.parent.create({
+          data: {
+            tenantId: alpha.tenantId,
+            legalName: 'Notify Fail Parent',
+            phoneE164: `+254700${Date.now() % 1_000_000}`,
+            dateOfBirth: new Date('1985-01-01'),
+            gender: 'female',
+          },
+        });
+        await prisma.parentStudent.create({
+          data: {
+            tenantId: alpha.tenantId,
+            parentId: parent.id,
+            studentId: student.id,
+          },
+        });
+      });
+
+      const comms = app.get(CommunicationsService);
+      const sendSmsSpy = jest.spyOn(comms, 'sendSms').mockRejectedValue(new Error('sms provider unavailable'));
+      try {
+        const boardRes = await request(app.getHttpServer())
+          .post(`/v1/trips/${activeTripId}/board`)
+          .set('Authorization', `Bearer ${alpha.driverAccessToken}`)
+          .set('x-tenant-id', alpha.tenantId)
+          .send({ admissionNumber: notifyAdmissionNumber })
+          .expect(201);
+        expect(boardRes.body.boardedAt).toBeTruthy();
+        // proves the throwing sendSms call actually executed inside the try/catch, not skipped
+        expect(sendSmsSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        sendSmsSpy.mockRestore();
+      }
+    });
+
+    it('returns TRIP_NOT_BOARDABLE (not STUDENT_NOT_ON_TRIP) when boarding a final-state trip with a bogus admission number', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/v1/trips/${latestFinalTripId}/board`)
+        .set('Authorization', `Bearer ${alpha.driverAccessToken}`)
+        .set('x-tenant-id', alpha.tenantId)
+        .send({ admissionNumber: `STU-BOGUS-${randomBytes(3).toString('hex')}` })
+        .expect(400);
+      expect(res.body.code).toBe('TRIP_NOT_BOARDABLE');
+    });
+
+    it('returns TRIP_NOT_IN_PROGRESS (not STUDENT_NOT_ON_TRIP) when alighting a scheduled trip with a bogus admission number', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/v1/trips/${nextTripId}/alight`)
+        .set('Authorization', `Bearer ${alpha.driverAccessToken}`)
+        .set('x-tenant-id', alpha.tenantId)
+        .send({ admissionNumber: `STU-BOGUS-${randomBytes(3).toString('hex')}` })
+        .expect(400);
+      expect(res.body.code).toBe('TRIP_NOT_IN_PROGRESS');
     });
   });
 });

@@ -9,6 +9,7 @@ export * from './incidents';
 export * from './hardware';
 export * from './notifications';
 export * from './pagination';
+export * from './trip-passengers';
 export * from './errors';
 export * from './api-extras';
 export * from './identity';
