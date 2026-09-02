@@ -90,11 +90,26 @@ class _DriverTripScreenState extends ConsumerState<DriverTripScreen> {
           : _TripDetailContent(
               detail: detail,
               onStart: () async {
-                final confirmedDetail = await ref.read(startDriverTripProvider)(
-                  widget.tripId,
-                );
-                await ref.read(tripTelemetryProvider).start(confirmedDetail.id);
-                if (mounted) setState(() => _confirmedDetail = confirmedDetail);
+                try {
+                  final confirmedDetail = await ref.read(
+                    startDriverTripProvider,
+                  )(widget.tripId);
+                  await ref
+                      .read(tripTelemetryProvider)
+                      .start(confirmedDetail.id);
+                  if (mounted) {
+                    setState(() => _confirmedDetail = confirmedDetail);
+                  }
+                } on ActiveTripConflict {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(this.context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'This driver or vehicle already has a trip in progress.',
+                      ),
+                    ),
+                  );
+                }
               },
               onEnd: () async {
                 final confirmedDetail = await ref.read(endDriverTripProvider)(

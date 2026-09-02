@@ -810,6 +810,78 @@ void main() {
     expect(find.text('Completed'), findsOneWidget);
   });
 
+  testWidgets(
+    'starting a trip shows a friendly message when the server reports another active trip',
+    (WidgetTester tester) async {
+      final dio = Dio();
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            if (options.path == '/trips/driver/trip-conflict') {
+              handler.resolve(
+                Response<Map<String, Object?>>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: _tripDetailResponse('trip-conflict', 'scheduled'),
+                ),
+              );
+              return;
+            }
+            if (options.path.endsWith('/driver-start')) {
+              handler.reject(
+                DioException(
+                  requestOptions: options,
+                  response: Response<Map<String, Object?>>(
+                    requestOptions: options,
+                    statusCode: 409,
+                    data: <String, Object?>{
+                      'code': 'TRIP_ALREADY_ACTIVE',
+                      'message': 'Vehicle already has a trip in progress.',
+                      'details': <String, Object?>{
+                        'activeTripId': 'trip-other',
+                        'conflictType': 'vehicle',
+                      },
+                    },
+                  ),
+                ),
+              );
+              return;
+            }
+            handler.resolve(
+              Response<void>(requestOptions: options, statusCode: 200),
+            );
+          },
+        ),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            apiClientProvider.overrideWithValue(dio),
+            tripTelemetryProvider.overrideWithValue(_FakeTelemetryService()),
+          ],
+          child: const MaterialApp(
+            home: DriverTripScreen(tripId: 'trip-conflict'),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Start trip'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirm start'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('This driver or vehicle already has a trip in progress.'),
+        findsOneWidget,
+      );
+      // Trip must remain scheduled — a conflict must never be mistaken for a
+      // successful start.
+      expect(find.text('Scheduled'), findsOneWidget);
+    },
+  );
+
   testWidgets('driver SOS failure queues outbox entry', (
     WidgetTester tester,
   ) async {

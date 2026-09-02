@@ -47,7 +47,10 @@ final startDriverTripProvider =
       final data = e.response?.data;
       if (data is Map<Object?, Object?>) {
         final code = data['code'];
-        final activeTripId = data['activeTripId'];
+        final details = data['details'];
+        final activeTripId = details is Map<Object?, Object?>
+            ? details['activeTripId']
+            : null;
         if (code == 'TRIP_ALREADY_ACTIVE' && activeTripId is String) {
           throw ActiveTripConflict(activeTripId: activeTripId);
         }
