@@ -21,7 +21,7 @@ class DriverShell extends ConsumerWidget {
     final path = GoRouterState.of(context).uri.path;
     final routeIndex = locations.indexOf(path);
     final selectedIndex = routeIndex < 0 ? 0 : routeIndex;
-    final tenantLabel = ref.watch(sessionNotifierProvider).value?.tenantSlug ?? 'Safari Shule';
+    final tenantLabel = ref.watch(sessionNotifierProvider).value?.tenantName ?? 'Safari Shule';
 
     return AdaptiveScaffold(
       tenantLabel: tenantLabel,
