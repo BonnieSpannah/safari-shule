@@ -571,7 +571,7 @@ as String,
 /// @nodoc
 mixin _$Session {
 
- String get accessToken; String get refreshToken; String get tenantSlug; SessionUser get user; ImpersonationState? get impersonation;
+ String get accessToken; String get refreshToken; String get tenantSlug; String get tenantName; SessionUser get user; ImpersonationState? get impersonation;
 /// Create a copy of Session
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -584,16 +584,16 @@ $SessionCopyWith<Session> get copyWith => _$SessionCopyWithImpl<Session>(this as
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Session&&(identical(other.accessToken, accessToken) || other.accessToken == accessToken)&&(identical(other.refreshToken, refreshToken) || other.refreshToken == refreshToken)&&(identical(other.tenantSlug, tenantSlug) || other.tenantSlug == tenantSlug)&&(identical(other.user, user) || other.user == user)&&(identical(other.impersonation, impersonation) || other.impersonation == impersonation));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Session&&(identical(other.accessToken, accessToken) || other.accessToken == accessToken)&&(identical(other.refreshToken, refreshToken) || other.refreshToken == refreshToken)&&(identical(other.tenantSlug, tenantSlug) || other.tenantSlug == tenantSlug)&&(identical(other.tenantName, tenantName) || other.tenantName == tenantName)&&(identical(other.user, user) || other.user == user)&&(identical(other.impersonation, impersonation) || other.impersonation == impersonation));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,accessToken,refreshToken,tenantSlug,user,impersonation);
+int get hashCode => Object.hash(runtimeType,accessToken,refreshToken,tenantSlug,tenantName,user,impersonation);
 
 @override
 String toString() {
-  return 'Session(accessToken: $accessToken, refreshToken: $refreshToken, tenantSlug: $tenantSlug, user: $user, impersonation: $impersonation)';
+  return 'Session(accessToken: $accessToken, refreshToken: $refreshToken, tenantSlug: $tenantSlug, tenantName: $tenantName, user: $user, impersonation: $impersonation)';
 }
 
 
@@ -604,7 +604,7 @@ abstract mixin class $SessionCopyWith<$Res>  {
   factory $SessionCopyWith(Session value, $Res Function(Session) _then) = _$SessionCopyWithImpl;
 @useResult
 $Res call({
- String accessToken, String refreshToken, String tenantSlug, SessionUser user, ImpersonationState? impersonation
+ String accessToken, String refreshToken, String tenantSlug, String tenantName, SessionUser user, ImpersonationState? impersonation
 });
 
 
@@ -621,11 +621,12 @@ class _$SessionCopyWithImpl<$Res>
 
 /// Create a copy of Session
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? accessToken = null,Object? refreshToken = null,Object? tenantSlug = null,Object? user = null,Object? impersonation = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? accessToken = null,Object? refreshToken = null,Object? tenantSlug = null,Object? tenantName = null,Object? user = null,Object? impersonation = freezed,}) {
   return _then(_self.copyWith(
 accessToken: null == accessToken ? _self.accessToken : accessToken // ignore: cast_nullable_to_non_nullable
 as String,refreshToken: null == refreshToken ? _self.refreshToken : refreshToken // ignore: cast_nullable_to_non_nullable
 as String,tenantSlug: null == tenantSlug ? _self.tenantSlug : tenantSlug // ignore: cast_nullable_to_non_nullable
+as String,tenantName: null == tenantName ? _self.tenantName : tenantName // ignore: cast_nullable_to_non_nullable
 as String,user: null == user ? _self.user : user // ignore: cast_nullable_to_non_nullable
 as SessionUser,impersonation: freezed == impersonation ? _self.impersonation : impersonation // ignore: cast_nullable_to_non_nullable
 as ImpersonationState?,
@@ -734,10 +735,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String accessToken,  String refreshToken,  String tenantSlug,  SessionUser user,  ImpersonationState? impersonation)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String accessToken,  String refreshToken,  String tenantSlug,  String tenantName,  SessionUser user,  ImpersonationState? impersonation)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Session() when $default != null:
-return $default(_that.accessToken,_that.refreshToken,_that.tenantSlug,_that.user,_that.impersonation);case _:
+return $default(_that.accessToken,_that.refreshToken,_that.tenantSlug,_that.tenantName,_that.user,_that.impersonation);case _:
   return orElse();
 
 }
@@ -755,10 +756,10 @@ return $default(_that.accessToken,_that.refreshToken,_that.tenantSlug,_that.user
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String accessToken,  String refreshToken,  String tenantSlug,  SessionUser user,  ImpersonationState? impersonation)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String accessToken,  String refreshToken,  String tenantSlug,  String tenantName,  SessionUser user,  ImpersonationState? impersonation)  $default,) {final _that = this;
 switch (_that) {
 case _Session():
-return $default(_that.accessToken,_that.refreshToken,_that.tenantSlug,_that.user,_that.impersonation);case _:
+return $default(_that.accessToken,_that.refreshToken,_that.tenantSlug,_that.tenantName,_that.user,_that.impersonation);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -775,10 +776,10 @@ return $default(_that.accessToken,_that.refreshToken,_that.tenantSlug,_that.user
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String accessToken,  String refreshToken,  String tenantSlug,  SessionUser user,  ImpersonationState? impersonation)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String accessToken,  String refreshToken,  String tenantSlug,  String tenantName,  SessionUser user,  ImpersonationState? impersonation)?  $default,) {final _that = this;
 switch (_that) {
 case _Session() when $default != null:
-return $default(_that.accessToken,_that.refreshToken,_that.tenantSlug,_that.user,_that.impersonation);case _:
+return $default(_that.accessToken,_that.refreshToken,_that.tenantSlug,_that.tenantName,_that.user,_that.impersonation);case _:
   return null;
 
 }
@@ -790,12 +791,13 @@ return $default(_that.accessToken,_that.refreshToken,_that.tenantSlug,_that.user
 @JsonSerializable()
 
 class _Session extends Session {
-  const _Session({required this.accessToken, required this.refreshToken, required this.tenantSlug, required this.user, this.impersonation}): super._();
+  const _Session({required this.accessToken, required this.refreshToken, required this.tenantSlug, required this.tenantName, required this.user, this.impersonation}): super._();
   factory _Session.fromJson(Map<String, dynamic> json) => _$SessionFromJson(json);
 
 @override final  String accessToken;
 @override final  String refreshToken;
 @override final  String tenantSlug;
+@override final  String tenantName;
 @override final  SessionUser user;
 @override final  ImpersonationState? impersonation;
 
@@ -812,16 +814,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Session&&(identical(other.accessToken, accessToken) || other.accessToken == accessToken)&&(identical(other.refreshToken, refreshToken) || other.refreshToken == refreshToken)&&(identical(other.tenantSlug, tenantSlug) || other.tenantSlug == tenantSlug)&&(identical(other.user, user) || other.user == user)&&(identical(other.impersonation, impersonation) || other.impersonation == impersonation));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Session&&(identical(other.accessToken, accessToken) || other.accessToken == accessToken)&&(identical(other.refreshToken, refreshToken) || other.refreshToken == refreshToken)&&(identical(other.tenantSlug, tenantSlug) || other.tenantSlug == tenantSlug)&&(identical(other.tenantName, tenantName) || other.tenantName == tenantName)&&(identical(other.user, user) || other.user == user)&&(identical(other.impersonation, impersonation) || other.impersonation == impersonation));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,accessToken,refreshToken,tenantSlug,user,impersonation);
+int get hashCode => Object.hash(runtimeType,accessToken,refreshToken,tenantSlug,tenantName,user,impersonation);
 
 @override
 String toString() {
-  return 'Session(accessToken: $accessToken, refreshToken: $refreshToken, tenantSlug: $tenantSlug, user: $user, impersonation: $impersonation)';
+  return 'Session(accessToken: $accessToken, refreshToken: $refreshToken, tenantSlug: $tenantSlug, tenantName: $tenantName, user: $user, impersonation: $impersonation)';
 }
 
 
@@ -832,7 +834,7 @@ abstract mixin class _$SessionCopyWith<$Res> implements $SessionCopyWith<$Res> {
   factory _$SessionCopyWith(_Session value, $Res Function(_Session) _then) = __$SessionCopyWithImpl;
 @override @useResult
 $Res call({
- String accessToken, String refreshToken, String tenantSlug, SessionUser user, ImpersonationState? impersonation
+ String accessToken, String refreshToken, String tenantSlug, String tenantName, SessionUser user, ImpersonationState? impersonation
 });
 
 
@@ -849,11 +851,12 @@ class __$SessionCopyWithImpl<$Res>
 
 /// Create a copy of Session
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? accessToken = null,Object? refreshToken = null,Object? tenantSlug = null,Object? user = null,Object? impersonation = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? accessToken = null,Object? refreshToken = null,Object? tenantSlug = null,Object? tenantName = null,Object? user = null,Object? impersonation = freezed,}) {
   return _then(_Session(
 accessToken: null == accessToken ? _self.accessToken : accessToken // ignore: cast_nullable_to_non_nullable
 as String,refreshToken: null == refreshToken ? _self.refreshToken : refreshToken // ignore: cast_nullable_to_non_nullable
 as String,tenantSlug: null == tenantSlug ? _self.tenantSlug : tenantSlug // ignore: cast_nullable_to_non_nullable
+as String,tenantName: null == tenantName ? _self.tenantName : tenantName // ignore: cast_nullable_to_non_nullable
 as String,user: null == user ? _self.user : user // ignore: cast_nullable_to_non_nullable
 as SessionUser,impersonation: freezed == impersonation ? _self.impersonation : impersonation // ignore: cast_nullable_to_non_nullable
 as ImpersonationState?,

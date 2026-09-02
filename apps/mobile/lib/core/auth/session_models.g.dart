@@ -47,6 +47,7 @@ _Session _$SessionFromJson(Map<String, dynamic> json) => _Session(
   accessToken: json['accessToken'] as String,
   refreshToken: json['refreshToken'] as String,
   tenantSlug: json['tenantSlug'] as String,
+  tenantName: json['tenantName'] as String,
   user: SessionUser.fromJson(json['user'] as Map<String, dynamic>),
   impersonation: json['impersonation'] == null
       ? null
@@ -59,6 +60,7 @@ Map<String, dynamic> _$SessionToJson(_Session instance) => <String, dynamic>{
   'accessToken': instance.accessToken,
   'refreshToken': instance.refreshToken,
   'tenantSlug': instance.tenantSlug,
+  'tenantName': instance.tenantName,
   'user': instance.user,
   'impersonation': instance.impersonation,
 };

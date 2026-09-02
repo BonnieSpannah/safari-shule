@@ -28,6 +28,7 @@ class _DriverSessionNotifier extends SessionNotifier {
       accessToken: 'token',
       refreshToken: 'refresh',
       tenantSlug: 'hillcrest',
+      tenantName: 'Hillcrest Academy',
       user: SessionUser(
         id: 'user-1',
         email: 'driver@hillcrest.ac.ke',
@@ -45,6 +46,7 @@ class _AdminSessionNotifier extends SessionNotifier {
       accessToken: 'token',
       refreshToken: 'refresh',
       tenantSlug: 'platform',
+      tenantName: 'Platform',
       user: SessionUser(
         id: 'admin-1',
         email: 'admin@safarishule.test',

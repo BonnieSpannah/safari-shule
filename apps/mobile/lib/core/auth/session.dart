@@ -48,6 +48,7 @@ class SessionNotifier extends AsyncNotifier<Session?> {
         ),
       );
       final meData = me.data ?? <String, Object?>{};
+      final tenantName = (meData['tenantName'] as String?) ?? tenantSlug;
       final rolesRaw = meData['roles'];
       final roles = rolesRaw is List
           ? rolesRaw.whereType<String>().toList(growable: false)
@@ -67,6 +68,7 @@ class SessionNotifier extends AsyncNotifier<Session?> {
         accessToken: accessToken,
         refreshToken: refreshToken,
         tenantSlug: tenantSlug,
+        tenantName: tenantName,
         user: user,
       );
       await _storage.write(session);

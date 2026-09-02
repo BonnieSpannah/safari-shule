@@ -37,6 +37,7 @@ abstract class Session with _$Session {
     required String accessToken,
     required String refreshToken,
     required String tenantSlug,
+    required String tenantName,
     required SessionUser user,
     ImpersonationState? impersonation,
   }) = _Session;

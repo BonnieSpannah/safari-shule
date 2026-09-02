@@ -26,6 +26,7 @@ class FakeSessionNotifierSuccess extends SessionNotifier {
         accessToken: 'token',
         refreshToken: 'refresh',
         tenantSlug: tenantSlug,
+        tenantName: 'Test School',
         user: SessionUser(
           id: 'u1',
           email: email,
