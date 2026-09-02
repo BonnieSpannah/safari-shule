@@ -242,6 +242,64 @@ void main() {
     expect(requests.contains('POST /trips/trip-confirm/driver-start'), isTrue);
   });
 
+  testWidgets(
+    'start trip confirmation sheet can board a student before confirming start',
+    (WidgetTester tester) async {
+      Map<String, Object?>? boardBody;
+      final dio = Dio();
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            if (options.path == '/trips/driver/trip-board') {
+              handler.resolve(
+                Response<Map<String, Object?>>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: _tripDetailResponse('trip-board', 'scheduled'),
+                ),
+              );
+              return;
+            }
+            if (options.path == '/trips/trip-board/board') {
+              boardBody = options.data as Map<String, Object?>;
+              handler.resolve(
+                Response<void>(requestOptions: options, statusCode: 200),
+              );
+              return;
+            }
+            handler.resolve(
+              Response<void>(requestOptions: options, statusCode: 200),
+            );
+          },
+        ),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [apiClientProvider.overrideWithValue(dio)],
+          child: const MaterialApp(
+            home: DriverTripScreen(tripId: 'trip-board'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Start trip'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Board student'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('student-lookup-input')),
+        'ADM-1',
+      );
+      await _tapAndAwaitRealAsync(tester, find.text('Confirm'));
+
+      expect(boardBody, <String, Object?>{'admissionNumber': 'ADM-1'});
+    },
+  );
+
   group('in-progress trip screen', () {
     testWidgets('shows the live map as the dominant view, never offering start', (
       WidgetTester tester,
@@ -540,6 +598,60 @@ void main() {
         expect(find.textContaining('still on board'), findsNothing);
       },
     );
+
+    testWidgets('in-progress bottom panel can alight a boarded student', (
+      WidgetTester tester,
+    ) async {
+      Map<String, Object?>? alightBody;
+      final dio = Dio();
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            if (options.path == '/trips/driver/trip-alight') {
+              handler.resolve(
+                Response<Map<String, Object?>>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: _tripDetailResponse('trip-alight', 'in_progress'),
+                ),
+              );
+              return;
+            }
+            if (options.path == '/trips/trip-alight/alight') {
+              alightBody = options.data as Map<String, Object?>;
+              handler.resolve(
+                Response<void>(requestOptions: options, statusCode: 200),
+              );
+              return;
+            }
+            handler.resolve(
+              Response<void>(requestOptions: options, statusCode: 200),
+            );
+          },
+        ),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [apiClientProvider.overrideWithValue(dio)],
+          child: const MaterialApp(
+            home: DriverTripScreen(tripId: 'trip-alight'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Alight student'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('student-lookup-input')),
+        'ADM-2',
+      );
+      await _tapAndAwaitRealAsync(tester, find.text('Confirm'));
+
+      expect(alightBody, <String, Object?>{'admissionNumber': 'ADM-2'});
+    });
   });
 
   group('completed trip screen', () {

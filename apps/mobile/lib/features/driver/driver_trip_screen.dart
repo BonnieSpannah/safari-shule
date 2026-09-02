@@ -6,6 +6,7 @@ import 'package:mobile/core/offline/outbox.dart';
 import 'package:mobile/core/telemetry/trip_telemetry_service.dart';
 import 'package:mobile/features/driver/driver_trip_models.dart';
 import 'package:mobile/features/driver/driver_trip_providers.dart';
+import 'package:mobile/features/driver/student_lookup_sheet.dart';
 import 'package:mobile/features/driver/trip_status_shell.dart';
 import 'package:mobile/features/driver/trip_time_format.dart';
 import 'package:uuid/uuid.dart';
@@ -249,13 +250,13 @@ class _ScheduledBottomPanel extends StatelessWidget {
 
 // Its own widget so Phase C can extend it with student-onboarding UI without
 // touching the caller.
-class _StartTripConfirmationSheet extends StatelessWidget {
+class _StartTripConfirmationSheet extends ConsumerWidget {
   const _StartTripConfirmationSheet({required this.detail});
 
   final DriverTripDetail detail;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -269,6 +270,20 @@ class _StartTripConfirmationSheet extends StatelessWidget {
           const SizedBox(height: 8),
           Text(detail.routeName),
           Text('Passengers expected: ${detail.passengerSummary.expected}'),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.qr_code_scanner),
+            label: const Text('Board student'),
+            onPressed: () => showModalBottomSheet<bool>(
+              context: context,
+              isScrollControlled: true,
+              builder: (_) => StudentLookupSheet(
+                title: 'Board student',
+                onSubmit: (admissionNumber) =>
+                    ref.read(boardStudentProvider)(detail.id, admissionNumber),
+              ),
+            ),
+          ),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
@@ -437,17 +452,19 @@ class _SosButton extends StatelessWidget {
   }
 }
 
-class _InProgressBottomPanel extends StatefulWidget {
+class _InProgressBottomPanel extends ConsumerStatefulWidget {
   const _InProgressBottomPanel({required this.detail, required this.onEnd});
 
   final DriverTripDetail detail;
   final Future<void> Function() onEnd;
 
   @override
-  State<_InProgressBottomPanel> createState() => _InProgressBottomPanelState();
+  ConsumerState<_InProgressBottomPanel> createState() =>
+      _InProgressBottomPanelState();
 }
 
-class _InProgressBottomPanelState extends State<_InProgressBottomPanel> {
+class _InProgressBottomPanelState
+    extends ConsumerState<_InProgressBottomPanel> {
   bool _expanded = true;
 
   Future<void> _confirmEnd(BuildContext context) async {
@@ -508,6 +525,24 @@ class _InProgressBottomPanelState extends State<_InProgressBottomPanel> {
                   onPressed: () => _confirmEnd(context),
                   icon: const Icon(Icons.flag_outlined),
                   label: const Text('End trip'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 48,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.qr_code_scanner),
+                  label: const Text('Alight student'),
+                  onPressed: () => showModalBottomSheet<bool>(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (_) => StudentLookupSheet(
+                      title: 'Alight student',
+                      onSubmit: (admissionNumber) => ref.read(
+                        alightStudentProvider,
+                      )(detail.id, admissionNumber),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
