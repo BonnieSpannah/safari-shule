@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/core/api/client.dart';
 import 'package:mobile/core/auth/session.dart';
 
+String _titleCase(String value) =>
+    value.isEmpty ? value : '${value[0].toUpperCase()}${value.substring(1)}';
+
 class AccountScreen extends ConsumerWidget {
   const AccountScreen({super.key});
 
@@ -31,13 +34,13 @@ class AccountScreen extends ConsumerWidget {
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.apartment_outlined),
           title: const Text('School tenant'),
-          subtitle: Text(session?.tenantSlug ?? ''),
+          subtitle: Text(session?.tenantName ?? session?.tenantSlug ?? ''),
         ),
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.badge_outlined),
           title: const Text('Access role'),
-          subtitle: Text(user?.roles.join(', ') ?? ''),
+          subtitle: Text((user?.roles ?? const <String>[]).map(_titleCase).join(', ')),
         ),
         const SizedBox(height: 32),
         FilledButton.tonalIcon(
