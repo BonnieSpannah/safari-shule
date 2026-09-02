@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { isAxiosError } from 'axios';
 import { format, formatDistanceToNow } from 'date-fns';
 import { Radio, Plus, Search, Play, Square, X as XIcon, Eye, Pencil } from 'lucide-react';
 
@@ -130,7 +131,14 @@ export function TripsPage() {
   const actionMutation = useMutation({
     mutationFn: ({ trip, action }: { trip: Trip; action: 'start' | 'end' | 'cancel' }) => action === 'start' ? startTrip(trip.id) : action === 'end' ? endTrip(trip.id) : cancelTrip(trip.id),
     onSuccess: (_, { action }) => { const labels = { start: 'Trip started.', end: 'Trip completed.', cancel: 'Trip cancelled.' }; toast.success(labels[action]); setActionTarget(null); qc.invalidateQueries({ queryKey: ['trips'] }); qc.invalidateQueries({ queryKey: ['dashboard-stats'] }); },
-    onError: () => toast.error('Could not update trip status.'),
+    onError: (error: unknown) => {
+      // Backend returns 409 { code: 'TRIP_ALREADY_ACTIVE', message } when the vehicle/driver already has a trip in progress.
+      if (isAxiosError<{ code?: string; message?: string }>(error) && error.response?.data?.code === 'TRIP_ALREADY_ACTIVE') {
+        toast.error(error.response.data.message || 'That driver or vehicle already has a trip in progress.');
+        return;
+      }
+      toast.error('Could not update trip status.');
+    },
   });
 
   const columns: Column<Trip>[] = [
