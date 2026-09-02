@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile/features/driver/driver_trip_models.dart';
 import 'package:mobile/features/driver/driver_trip_providers.dart';
+import 'package:mobile/features/driver/trip_time_format.dart';
 
 class DriverRecentTripsScreen extends ConsumerWidget {
   const DriverRecentTripsScreen({super.key});
@@ -48,6 +49,7 @@ class _RecentTripRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
+      key: Key('driver-recent-trip-${summary.id}'),
       color: Theme.of(context).colorScheme.surfaceContainerLow,
       borderRadius: const BorderRadius.all(Radius.circular(8)),
       child: InkWell(
@@ -68,7 +70,17 @@ class _RecentTripRow extends StatelessWidget {
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 2),
-                    Text(_statusLabel(summary.status)),
+                    Row(
+                      children: <Widget>[
+                        Text(_statusLabel(summary.status)),
+                        const Spacer(),
+                        if (summary.endedAt != null)
+                          Text(
+                            formatClockTime(summary.endedAt!),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ),
