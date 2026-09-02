@@ -91,6 +91,19 @@ class PassengerSummary {
 
 // ── Route ──────────────────────────────────────────────────────────────────
 
+class TripAssistant {
+  const TripAssistant({required this.id, required this.fullName});
+
+  final String id;
+  final String fullName;
+
+  factory TripAssistant.fromJson(Map<String, Object?> json) {
+    if (json['id'] == null) throw const FormatException('TripAssistant: missing id');
+    if (json['fullName'] == null) throw const FormatException('TripAssistant: missing fullName');
+    return TripAssistant(id: json['id'] as String, fullName: json['fullName'] as String);
+  }
+}
+
 class _TripRoute {
   const _TripRoute({
     required this.id,
@@ -199,6 +212,8 @@ class DriverTripDetail {
     required this.passengerSummary,
     required this.cancellationReason,
     required List<TripLocationSnapshot> locationSnapshots,
+    this.assistant,
+    this.vehicle,
   })  : _route = route,
         _locationSnapshots = locationSnapshots;
 
@@ -212,9 +227,13 @@ class DriverTripDetail {
   final String vehicleId;
   final PassengerSummary passengerSummary;
   final String? cancellationReason;
+  final TripAssistant? assistant;
+  final SummaryVehicle? vehicle;
 
   final _TripRoute _route;
   final List<TripLocationSnapshot> _locationSnapshots;
+
+  String get routeName => _route.name;
 
   // ── Derived policy ───────────────────────────────────────────────────────
 
@@ -296,6 +315,12 @@ class DriverTripDetail {
           PassengerSummary.fromJson(json['passengerSummary'] as Map<String, Object?>),
       cancellationReason: json['cancellationReason'] as String?,
       locationSnapshots: List.unmodifiable(snapshots),
+      assistant: json['assistant'] != null
+          ? TripAssistant.fromJson(json['assistant'] as Map<String, Object?>)
+          : null,
+      vehicle: json['vehicle'] != null
+          ? SummaryVehicle.fromJson(json['vehicle'] as Map<String, Object?>)
+          : null,
     );
   }
 }

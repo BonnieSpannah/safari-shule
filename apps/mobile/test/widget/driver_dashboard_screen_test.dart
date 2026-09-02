@@ -6,6 +6,82 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/features/driver/driver_dashboard_screen.dart';
 import 'package:mobile/features/driver/driver_trip_models.dart';
 import 'package:mobile/features/driver/driver_trip_providers.dart';
+import 'package:mobile/features/driver/driver_recent_trips_screen.dart';
+
+void _registerFormattingTests() {
+  group('formatTripSchedule', () {
+    final now = DateTime(2026, 9, 2, 10);
+
+    test('uses a relative day label for today and tomorrow', () {
+      expect(
+        formatTripSchedule(DateTime(2026, 9, 2, 18), now: now),
+        'Today 6:00 PM',
+      );
+      expect(
+        formatTripSchedule(DateTime(2026, 9, 3, 7), now: now),
+        'Tomorrow 7:00 AM',
+      );
+    });
+
+    test('uses an absolute date outside yesterday, today, and tomorrow', () {
+      expect(
+        formatTripSchedule(DateTime(2026, 9, 5, 7), now: now),
+        '5 Sep 2026, 7:00 AM',
+      );
+    });
+  });
+
+  group('formatTripStarted', () {
+    test('shows an elapsed duration for a recent start', () {
+      expect(
+        formatTripStarted(
+          DateTime(2026, 9, 2, 9, 36),
+          now: DateTime(2026, 9, 2, 10),
+        ),
+        'Started 24 min ago',
+      );
+    });
+
+    test('includes the start time once a trip has run for a day', () {
+      expect(
+        formatTripStarted(
+          DateTime(2026, 8, 31, 6, 5),
+          now: DateTime(2026, 9, 2, 10),
+        ),
+        'Started 2 days ago, 6:05 AM',
+      );
+    });
+  });
+
+  group('formatGpsHealth', () {
+    final now = DateTime.utc(2026, 9, 2, 10);
+
+    test('reports unavailable when there is no snapshot', () {
+      expect(formatGpsHealth(null, now: now), 'Location unavailable');
+    });
+
+    test('reports live for a very recent snapshot', () {
+      expect(
+        formatGpsHealth(now.subtract(const Duration(seconds: 20)), now: now),
+        'GPS live',
+      );
+    });
+
+    test('reports elapsed minutes for a moderately stale snapshot', () {
+      expect(
+        formatGpsHealth(now.subtract(const Duration(minutes: 5)), now: now),
+        'GPS 5 min ago',
+      );
+    });
+
+    test('flags a very stale snapshot without implying trip status', () {
+      expect(
+        formatGpsHealth(now.subtract(const Duration(minutes: 40)), now: now),
+        'GPS stale · 40 min ago',
+      );
+    });
+  });
+}
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -53,7 +129,8 @@ DriverTripDetail _makeDetail({
   });
 }
 
-DriverWorkspace _activeWorkspace() => DriverWorkspace.fromJson(<String, Object?>{
+DriverWorkspace _activeWorkspace() =>
+    DriverWorkspace.fromJson(<String, Object?>{
       'activeTrip': <String, Object?>{
         'id': 'trip-active',
         'status': 'in_progress',
@@ -63,7 +140,10 @@ DriverWorkspace _activeWorkspace() => DriverWorkspace.fromJson(<String, Object?>
         'direction': 'outbound',
         'routeId': 'route-1',
         'vehicleId': 'vehicle-1',
-        'route': <String, Object?>{'id': 'route-1', 'name': 'Kilimani to Hillcrest'},
+        'route': <String, Object?>{
+          'id': 'route-1',
+          'name': 'Kilimani to Hillcrest',
+        },
         'vehicle': <String, Object?>{
           'id': 'vehicle-1',
           'registration': 'KCA 123A',
@@ -81,7 +161,10 @@ DriverWorkspace _activeWorkspace() => DriverWorkspace.fromJson(<String, Object?>
           'direction': 'inbound',
           'routeId': 'route-2',
           'vehicleId': 'vehicle-1',
-          'route': <String, Object?>{'id': 'route-2', 'name': 'Hillcrest to Kilimani'},
+          'route': <String, Object?>{
+            'id': 'route-2',
+            'name': 'Hillcrest to Kilimani',
+          },
           'vehicle': <String, Object?>{
             'id': 'vehicle-1',
             'registration': 'KCA 123A',
@@ -100,7 +183,10 @@ DriverWorkspace _activeWorkspace() => DriverWorkspace.fromJson(<String, Object?>
           'direction': 'outbound',
           'routeId': 'route-1',
           'vehicleId': 'vehicle-1',
-          'route': <String, Object?>{'id': 'route-1', 'name': 'Kilimani to Hillcrest'},
+          'route': <String, Object?>{
+            'id': 'route-1',
+            'name': 'Kilimani to Hillcrest',
+          },
           'vehicle': <String, Object?>{
             'id': 'vehicle-1',
             'registration': 'KCA 123A',
@@ -111,7 +197,8 @@ DriverWorkspace _activeWorkspace() => DriverWorkspace.fromJson(<String, Object?>
       ],
     });
 
-DriverWorkspace _noActiveWorkspace() => DriverWorkspace.fromJson(<String, Object?>{
+DriverWorkspace _noActiveWorkspace() =>
+    DriverWorkspace.fromJson(<String, Object?>{
       'activeTrip': null,
       'upcomingTrips': <Object?>[
         <String, Object?>{
@@ -123,7 +210,10 @@ DriverWorkspace _noActiveWorkspace() => DriverWorkspace.fromJson(<String, Object
           'direction': 'outbound',
           'routeId': 'route-1',
           'vehicleId': 'vehicle-1',
-          'route': <String, Object?>{'id': 'route-1', 'name': 'Kilimani to Hillcrest'},
+          'route': <String, Object?>{
+            'id': 'route-1',
+            'name': 'Kilimani to Hillcrest',
+          },
           'vehicle': <String, Object?>{
             'id': 'vehicle-1',
             'registration': 'KCA 123A',
@@ -140,7 +230,10 @@ DriverWorkspace _noActiveWorkspace() => DriverWorkspace.fromJson(<String, Object
           'direction': 'inbound',
           'routeId': 'route-2',
           'vehicleId': 'vehicle-1',
-          'route': <String, Object?>{'id': 'route-2', 'name': 'Hillcrest to Kilimani'},
+          'route': <String, Object?>{
+            'id': 'route-2',
+            'name': 'Hillcrest to Kilimani',
+          },
           'vehicle': <String, Object?>{
             'id': 'vehicle-1',
             'registration': 'KCA 123A',
@@ -153,10 +246,10 @@ DriverWorkspace _noActiveWorkspace() => DriverWorkspace.fromJson(<String, Object
     });
 
 DriverWorkspace _emptyWorkspace() => DriverWorkspace.fromJson(<String, Object?>{
-      'activeTrip': null,
-      'upcomingTrips': <Object?>[],
-      'recentTrips': <Object?>[],
-    });
+  'activeTrip': null,
+  'upcomingTrips': <Object?>[],
+  'recentTrips': <Object?>[],
+});
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -169,6 +262,8 @@ Widget _wrap(Widget child, {List<Object> overrides = const []}) =>
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 void main() {
+  _registerFormattingTests();
+
   group('DriverDashboardScreen — active trip', () {
     testWidgets('shows Resume trip, route name, and compact map preview', (
       WidgetTester tester,
@@ -181,7 +276,9 @@ void main() {
           const DriverDashboardScreen(),
           overrides: [
             driverWorkspaceProvider.overrideWith((_) async => workspace),
-            driverTripDetailProvider('trip-active').overrideWith((_) async => detail),
+            driverTripDetailProvider(
+              'trip-active',
+            ).overrideWith((_) async => detail),
           ],
         ),
       );
@@ -191,8 +288,43 @@ void main() {
       expect(find.byKey(const Key('driver-active-trip')), findsOneWidget);
       expect(find.text('Resume trip'), findsOneWidget);
       expect(find.text('Kilimani to Hillcrest'), findsOneWidget);
-      expect(find.byKey(const Key('driver-active-map-preview')), findsOneWidget);
+      expect(
+        find.byKey(const Key('driver-active-map-preview')),
+        findsOneWidget,
+      );
     });
+
+    testWidgets(
+      'pushes elapsed time to the status line and direction to the vehicle line',
+      (WidgetTester tester) async {
+        final workspace = _activeWorkspace();
+        final detail = _makeDetail();
+
+        await tester.pumpWidget(
+          _wrap(
+            const DriverDashboardScreen(),
+            overrides: [
+              driverWorkspaceProvider.overrideWith((_) async => workspace),
+              driverTripDetailProvider(
+                'trip-active',
+              ).overrideWith((_) async => detail),
+            ],
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+
+        final statusPos = tester.getTopLeft(find.text('In progress'));
+        final elapsedPos = tester.getTopLeft(find.textContaining('Started'));
+        expect(elapsedPos.dx, greaterThan(statusPos.dx));
+        expect(elapsedPos.dy, closeTo(statusPos.dy, 4));
+
+        final vehiclePos = tester.getTopLeft(find.text('KCA 123A'));
+        final directionPos = tester.getTopLeft(find.text('Outbound'));
+        expect(directionPos.dx, greaterThan(vehiclePos.dx));
+        expect(directionPos.dy, closeTo(vehiclePos.dy, 4));
+      },
+    );
 
     testWidgets('shows Up next section for additional upcoming trips', (
       WidgetTester tester,
@@ -205,7 +337,9 @@ void main() {
           const DriverDashboardScreen(),
           overrides: [
             driverWorkspaceProvider.overrideWith((_) async => workspace),
-            driverTripDetailProvider('trip-active').overrideWith((_) async => detail),
+            driverTripDetailProvider(
+              'trip-active',
+            ).overrideWith((_) async => detail),
           ],
         ),
       );
@@ -224,7 +358,9 @@ void main() {
           const DriverDashboardScreen(),
           overrides: [
             driverWorkspaceProvider.overrideWith((_) async => workspace),
-            driverTripDetailProvider('trip-active').overrideWith((_) async => detail),
+            driverTripDetailProvider(
+              'trip-active',
+            ).overrideWith((_) async => detail),
           ],
         ),
       );
@@ -237,25 +373,28 @@ void main() {
   });
 
   group('DriverDashboardScreen — no active trip', () {
-    testWidgets('earliest upcoming is primary, shows View route, no Resume trip', (
-      WidgetTester tester,
-    ) async {
-      final workspace = _noActiveWorkspace();
+    testWidgets(
+      'earliest upcoming is primary, shows View route, no Resume trip',
+      (WidgetTester tester) async {
+        final workspace = _noActiveWorkspace();
 
-      await tester.pumpWidget(
-        _wrap(
-          const DriverDashboardScreen(),
-          overrides: [driverWorkspaceProvider.overrideWith((_) async => workspace)],
-        ),
-      );
-      await tester.pump();
-      await tester.pump();
+        await tester.pumpWidget(
+          _wrap(
+            const DriverDashboardScreen(),
+            overrides: [
+              driverWorkspaceProvider.overrideWith((_) async => workspace),
+            ],
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
 
-      expect(find.byKey(const Key('driver-next-trip')), findsOneWidget);
-      expect(find.text('Kilimani to Hillcrest'), findsOneWidget);
-      expect(find.text('View route'), findsOneWidget);
-      expect(find.text('Resume trip'), findsNothing);
-    });
+        expect(find.byKey(const Key('driver-next-trip')), findsOneWidget);
+        expect(find.text('Kilimani to Hillcrest'), findsOneWidget);
+        expect(find.text('View route'), findsOneWidget);
+        expect(find.text('Resume trip'), findsNothing);
+      },
+    );
 
     testWidgets('additional upcoming trips are shown compactly', (
       WidgetTester tester,
@@ -265,7 +404,9 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           const DriverDashboardScreen(),
-          overrides: [driverWorkspaceProvider.overrideWith((_) async => workspace)],
+          overrides: [
+            driverWorkspaceProvider.overrideWith((_) async => workspace),
+          ],
         ),
       );
       await tester.pump();
@@ -282,7 +423,9 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           const DriverDashboardScreen(),
-          overrides: [driverWorkspaceProvider.overrideWith((_) async => workspace)],
+          overrides: [
+            driverWorkspaceProvider.overrideWith((_) async => workspace),
+          ],
         ),
       );
       await tester.pump();
@@ -293,6 +436,32 @@ void main() {
     });
   });
 
+  group('DriverRecentTripsScreen', () {
+    testWidgets('renders server-scoped recent trips as read-only rows', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        _wrap(
+          const DriverRecentTripsScreen(),
+          overrides: [
+            driverWorkspaceProvider.overrideWith(
+              (_) async => _activeWorkspace(),
+            ),
+          ],
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Recent trips'), findsOneWidget);
+      expect(find.text('Kilimani to Hillcrest'), findsOneWidget);
+      expect(find.text('Completed'), findsOneWidget);
+      expect(find.text('Start trip'), findsNothing);
+      expect(find.text('End trip'), findsNothing);
+      expect(find.text('SOS'), findsNothing);
+    });
+  });
+
   group('DriverDashboardScreen — empty', () {
     testWidgets('shows No trips assigned message', (WidgetTester tester) async {
       final workspace = _emptyWorkspace();
@@ -300,7 +469,9 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           const DriverDashboardScreen(),
-          overrides: [driverWorkspaceProvider.overrideWith((_) async => workspace)],
+          overrides: [
+            driverWorkspaceProvider.overrideWith((_) async => workspace),
+          ],
         ),
       );
       await tester.pump();
@@ -327,18 +498,26 @@ void main() {
       await tester.pump();
 
       // Loading skeleton must be visible; no spinner fallback that collapses content area
-      expect(find.byKey(const Key('driver-workspace-skeleton')), findsOneWidget);
+      expect(
+        find.byKey(const Key('driver-workspace-skeleton')),
+        findsOneWidget,
+      );
     });
   });
 
   group('DriverDashboardScreen — error', () {
-    testWidgets('shows error message and retry button', (WidgetTester tester) async {
+    testWidgets('shows error message and retry button', (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(
         _wrap(
           const DriverDashboardScreen(),
           overrides: [
             driverWorkspaceProvider.overrideWithValue(
-              AsyncValue.error(Exception('Network unavailable'), StackTrace.empty),
+              AsyncValue.error(
+                Exception('Network unavailable'),
+                StackTrace.empty,
+              ),
             ),
           ],
         ),
@@ -348,7 +527,9 @@ void main() {
       expect(find.byKey(const Key('driver-workspace-retry')), findsOneWidget);
     });
 
-    testWidgets('retry button triggers provider refresh', (WidgetTester tester) async {
+    testWidgets('retry button triggers provider refresh', (
+      WidgetTester tester,
+    ) async {
       var callCount = 0;
 
       // Use overrideWith so invalidate actually re-runs the build function.

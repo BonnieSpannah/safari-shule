@@ -5,6 +5,8 @@ import 'package:mobile/core/api/api_error.dart';
 import 'package:mobile/features/driver/driver_trip_map.dart';
 import 'package:mobile/features/driver/driver_trip_models.dart';
 import 'package:mobile/features/driver/driver_trip_providers.dart';
+import 'package:mobile/features/driver/trip_time_format.dart';
+export 'package:mobile/features/driver/trip_time_format.dart';
 
 // Design tokens
 const _cardRadius = BorderRadius.all(Radius.circular(8));
@@ -130,7 +132,8 @@ class _WorkspaceContent extends ConsumerWidget {
     final active = workspace.activeTrip;
     final upcoming = workspace.upcomingTrips;
     final recent = workspace.recentTrips;
-    final hasContent = active != null || upcoming.isNotEmpty || recent.isNotEmpty;
+    final hasContent =
+        active != null || upcoming.isNotEmpty || recent.isNotEmpty;
 
     if (!hasContent) {
       return const _EmptyState();
@@ -163,9 +166,7 @@ class _WorkspaceContent extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
           ],
-          if (recent.isNotEmpty) ...<Widget>[
-            _RecentRow(count: recent.length),
-          ],
+          if (recent.isNotEmpty) ...<Widget>[_RecentRow(count: recent.length)],
         ],
       ),
     );
@@ -226,11 +227,11 @@ class _ActiveTripCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            const Row(
+            Row(
               children: <Widget>[
-                Icon(Icons.circle, size: 10, color: _amber),
-                SizedBox(width: 6),
-                Text(
+                const Icon(Icons.circle, size: 10, color: _amber),
+                const SizedBox(width: 6),
+                const Text(
                   'In progress',
                   style: TextStyle(
                     color: _amber,
@@ -238,18 +239,33 @@ class _ActiveTripCard extends ConsumerWidget {
                     fontSize: 12,
                   ),
                 ),
+                const Spacer(),
+                if (summary.startedAt != null)
+                  Text(
+                    formatTripStarted(summary.startedAt!),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
               ],
             ),
             const SizedBox(height: 4),
             Text(
               summary.route.name,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
-            Text(
-              summary.vehicle.registration,
-              style: Theme.of(context).textTheme.bodySmall,
+            Row(
+              children: <Widget>[
+                Text(
+                  summary.vehicle.registration,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const Spacer(),
+                Text(
+                  formatTripDirection(summary.direction),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
             ),
             const SizedBox(height: 10),
             _CompactMapPreview(detailAsync: detailAsync),
@@ -291,10 +307,8 @@ class _CompactMapPreview extends StatelessWidget {
               child: Icon(Icons.map_outlined, color: Colors.grey),
             ),
           ),
-          data: (detail) => DriverTripMap(
-            policy: TripMapPolicy.from(detail),
-            compact: true,
-          ),
+          data: (detail) =>
+              DriverTripMap(policy: TripMapPolicy.from(detail), compact: true),
         ),
       ),
     );
@@ -309,7 +323,7 @@ class _NextTripCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final timeLabel = _formatTime(summary.scheduledStart);
+    final timeLabel = formatTripSchedule(summary.scheduledStart);
 
     return Card(
       key: const Key('driver-next-trip'),
@@ -332,9 +346,9 @@ class _NextTripCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               summary.route.name,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             Text(
               summary.vehicle.registration,
@@ -385,7 +399,7 @@ class _CompactTripRow extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       Text(
-                        _formatTime(summary.scheduledStart),
+                        formatTripSchedule(summary.scheduledStart),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
@@ -415,7 +429,7 @@ class _RecentRow extends StatelessWidget {
       borderRadius: _cardRadius,
       child: InkWell(
         borderRadius: _cardRadius,
-        onTap: () {},
+        onTap: () => context.push('/driver/recent'),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           child: Row(
@@ -442,12 +456,3 @@ class _RecentRow extends StatelessWidget {
 }
 
 // ── Utility ────────────────────────────────────────────────────────────────
-
-String _formatTime(DateTime dt) {
-  final local = dt.toLocal();
-  final h = local.hour;
-  final m = local.minute.toString().padLeft(2, '0');
-  final period = h >= 12 ? 'PM' : 'AM';
-  final hour12 = h % 12 == 0 ? 12 : h % 12;
-  return '$hour12:$m $period';
-}

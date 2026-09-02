@@ -23,6 +23,8 @@ describe('Driver workspace (e2e)', () => {
   let otherDriverTripId: string;
   let betaTripId: string;
   let secondDriverAccessToken: string;
+  let assistantUserId: string;
+  const assistantFullName = 'Trip Assistant';
 
   beforeAll(async () => {
     ({ app, prisma, tenantAdmin, auth } = await bootstrapTestApp());
@@ -78,6 +80,25 @@ describe('Driver workspace (e2e)', () => {
       });
       secondDriverAccessToken = secondDriverTokens.accessToken;
 
+      // ── Assistant assigned to the active trip ────────────────────────────────
+      const assistantRole = await prisma.role.findUniqueOrThrow({
+        where: { tenantId_key: { tenantId: alpha.tenantId, key: 'assistant' } },
+      });
+      const assistantPasswordHash = await auth.hashPassword('Assistant!Pass1');
+      const assistant = await prisma.user.create({
+        data: {
+          tenantId: alpha.tenantId,
+          email: `assistant-${suffix}@dw-alpha.test`,
+          passwordHash: assistantPasswordHash,
+          status: 'active',
+          fullName: assistantFullName,
+        },
+      });
+      await prisma.userRole.create({
+        data: { tenantId: alpha.tenantId, userId: assistant.id, roleId: assistantRole.id },
+      });
+      assistantUserId = assistant.id;
+
       // ── Students for passenger seeding ───────────────────────────────────────
       const student1 = await prisma.student.create({
         data: {
@@ -105,6 +126,7 @@ describe('Driver workspace (e2e)', () => {
           routeId: alphaRouteId,
           vehicleId: alpha.device!.vehicleId,
           driverUserId: alpha.driverUserId,
+          assistantUserId: assistant.id,
           scheduledStart: new Date(now - 1800_000),
           direction: 'morning_pickup',
           status: 'in_progress' as any,
@@ -352,6 +374,24 @@ describe('Driver workspace (e2e)', () => {
       expect(detail.body.locationSnapshots).toEqual([
         expect.objectContaining({ lat: -1.2921, lng: 36.8219 }),
       ]);
+    });
+
+    it('includes assigned assistant details, and null when unassigned', async () => {
+      const detail = await request(app.getHttpServer())
+        .get(`/v1/trips/driver/${activeTripId}`)
+        .set('Authorization', `Bearer ${alpha.driverAccessToken}`)
+        .set('x-tenant-id', alpha.tenantId)
+        .expect(200);
+
+      expect(detail.body.assistant).toEqual({ id: assistantUserId, fullName: assistantFullName });
+
+      const unassigned = await request(app.getHttpServer())
+        .get(`/v1/trips/driver/${nextTripId}`)
+        .set('Authorization', `Bearer ${alpha.driverAccessToken}`)
+        .set('x-tenant-id', alpha.tenantId)
+        .expect(200);
+
+      expect(unassigned.body.assistant).toBeNull();
     });
 
     it('returns 404 for a trip assigned to another driver', async () => {

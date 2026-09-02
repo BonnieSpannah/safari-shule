@@ -126,11 +126,19 @@ export class TripsService {
       ORDER BY "recordedAt" ASC
     `;
 
+    const assistant = trip.assistantUserId
+      ? await this.prisma.user.findFirst({
+          where: { id: trip.assistantUserId },
+          select: { id: true, fullName: true },
+        })
+      : null;
+
     const { passengers: _passengers, ...tripData } = trip;
     return {
       ...tripData,
       route,
       passengerSummary,
+      assistant,
       locationSnapshots: locationSnapshots.map((s) => ({
         ...s,
         recordedAt: s.recordedAt.toISOString(),

@@ -628,6 +628,51 @@ void main() {
     });
   });
 
+  // ── assistant ──────────────────────────────────────────────────────────────
+
+  group('assistant', () {
+    test('is null when not present in JSON', () {
+      final detail = DriverTripDetail.fromJson(tripDetailBase(status: 'in_progress'));
+      expect(detail.assistant, isNull);
+    });
+
+    test('is null when JSON value is null', () {
+      final json = Map<String, Object?>.from(tripDetailBase(status: 'in_progress'))
+        ..['assistant'] = null;
+      final detail = DriverTripDetail.fromJson(json);
+      expect(detail.assistant, isNull);
+    });
+
+    test('is parsed when present', () {
+      final json = Map<String, Object?>.from(tripDetailBase(status: 'in_progress'))
+        ..['assistant'] = <String, Object?>{'id': 'assistant-1', 'fullName': 'Jane Assistant'};
+      final detail = DriverTripDetail.fromJson(json);
+      expect(detail.assistant?.id, 'assistant-1');
+      expect(detail.assistant?.fullName, 'Jane Assistant');
+    });
+  });
+
+  // ── vehicle ────────────────────────────────────────────────────────────────
+
+  group('vehicle', () {
+    test('is null when not present in JSON', () {
+      final detail = DriverTripDetail.fromJson(tripDetailBase(status: 'in_progress'));
+      expect(detail.vehicle, isNull);
+    });
+
+    test('is parsed when present', () {
+      final json = Map<String, Object?>.from(tripDetailBase(status: 'in_progress'))
+        ..['vehicle'] = <String, Object?>{
+          'id': 'vehicle-1',
+          'registration': 'KCA 123A',
+          'capacity': 33,
+        };
+      final detail = DriverTripDetail.fromJson(json);
+      expect(detail.vehicle?.registration, 'KCA 123A');
+      expect(detail.vehicle?.capacity, 33);
+    });
+  });
+
   // ── malformed required detail fields ──────────────────────────────────────
 
   group('malformed required detail fields', () {

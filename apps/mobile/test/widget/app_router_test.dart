@@ -81,7 +81,7 @@ void main() {
     );
 
     await tester.pumpAndSettle();
-    expect(find.text('Refresh trips'), findsOneWidget);
+    expect(find.text('My trips'), findsOneWidget);
   });
 
   testWidgets('driver can navigate to account and sign out', (tester) async {

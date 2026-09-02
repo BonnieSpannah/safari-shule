@@ -13,6 +13,12 @@ class TripTelemetryService {
   Timer? _fallbackTimer;
   bg.Coords? _lastCoords;
 
+  // Test-friendly shape; keeps the plugin's Coords type out of the public API.
+  ({double lat, double lng})? get lastKnownLocation {
+    final coords = _lastCoords;
+    return coords != null ? (lat: coords.latitude, lng: coords.longitude) : null;
+  }
+
   Future<void> start(String tripId) async {
     await stop();
 
