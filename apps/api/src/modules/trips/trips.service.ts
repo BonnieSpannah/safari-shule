@@ -245,6 +245,10 @@ export class TripsService {
       });
       if (!vehicle) throw new BadRequestException('Selected vehicle was not found for this tenant.');
       if (vehicle.status !== 'active') throw new BadRequestException('Selected vehicle must be active for reassignment.');
+      const activeForNewVehicle = await this.findActiveTripIdForVehicle(trip.tenantId, nextVehicleId, id);
+      if (activeForNewVehicle && trip.status === 'in_progress') {
+        throw this.activeTripConflict(activeForNewVehicle, 'vehicle');
+      }
     }
 
     if (nextDriverUserId) {
@@ -287,12 +291,17 @@ export class TripsService {
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         const conflictDriverId = nextDriverUserId ?? trip.driverUserId;
-        const activeTripId = await this.findActiveTripId(trip.tenantId, conflictDriverId, id);
+        const conflictVehicleId = nextVehicleId ?? trip.vehicleId;
+        const driverConflictId = await this.findActiveTripId(trip.tenantId, conflictDriverId, id);
+        const vehicleConflictId = driverConflictId
+          ? null
+          : await this.findActiveTripIdForVehicle(trip.tenantId, conflictVehicleId, id);
+        const activeTripId = driverConflictId ?? vehicleConflictId;
         throw activeTripId
-          ? this.activeTripConflict(activeTripId)
+          ? this.activeTripConflict(activeTripId, driverConflictId ? 'driver' : 'vehicle')
           : new ConflictException({
               code: ERROR_CODES.TRIP_ALREADY_ACTIVE,
-              message: 'Driver already has a trip in progress.',
+              message: 'Driver or vehicle already has a trip in progress.',
               details: { activeTripId: null },
             });
       }
@@ -315,11 +324,11 @@ export class TripsService {
     });
   }
 
-  private activeTripConflict(activeTripId: string): ConflictException {
+  private activeTripConflict(activeTripId: string, conflictSource: 'driver' | 'vehicle' = 'driver'): ConflictException {
     return new ConflictException({
       code: ERROR_CODES.TRIP_ALREADY_ACTIVE,
-      message: 'Driver already has a trip in progress.',
-      details: { activeTripId },
+      message: conflictSource === 'vehicle' ? 'Vehicle already has a trip in progress.' : 'Driver already has a trip in progress.',
+      details: { activeTripId, conflictType: conflictSource },
     });
   }
 
@@ -340,6 +349,23 @@ export class TripsService {
     return active?.id ?? null;
   }
 
+  private async findActiveTripIdForVehicle(
+    tenantId: string,
+    vehicleId: string,
+    excludeTripId?: string,
+  ): Promise<string | null> {
+    const active = await this.prisma.trip.findFirst({
+      where: {
+        tenantId,
+        vehicleId,
+        status: 'in_progress',
+        ...(excludeTripId ? { id: { not: excludeTripId } } : {}),
+      },
+      select: { id: true },
+    });
+    return active?.id ?? null;
+  }
+
   private async startTrip(id: string, assignedDriverUserId?: string) {
     const trip = await this.prisma.trip.findFirst({
       where: {
@@ -352,7 +378,9 @@ export class TripsService {
       throw new BadRequestException({ code: 'TRIP_NOT_SCHEDULED' });
     }
     const activeTripId = await this.findActiveTripId(trip.tenantId, trip.driverUserId, trip.id);
-    if (activeTripId) throw this.activeTripConflict(activeTripId);
+    if (activeTripId) throw this.activeTripConflict(activeTripId, 'driver');
+    const activeVehicleTripId = await this.findActiveTripIdForVehicle(trip.tenantId, trip.vehicleId, trip.id);
+    if (activeVehicleTripId) throw this.activeTripConflict(activeVehicleTripId, 'vehicle');
 
     try {
       return await this.prisma.trip.update({
@@ -361,12 +389,16 @@ export class TripsService {
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        const winnerId = await this.findActiveTripId(trip.tenantId, trip.driverUserId);
+        const driverWinnerId = await this.findActiveTripId(trip.tenantId, trip.driverUserId);
+        const vehicleWinnerId = driverWinnerId
+          ? null
+          : await this.findActiveTripIdForVehicle(trip.tenantId, trip.vehicleId);
+        const winnerId = driverWinnerId ?? vehicleWinnerId;
         throw winnerId
-          ? this.activeTripConflict(winnerId)
+          ? this.activeTripConflict(winnerId, driverWinnerId ? 'driver' : 'vehicle')
           : new ConflictException({
               code: ERROR_CODES.TRIP_ALREADY_ACTIVE,
-              message: 'Driver already has a trip in progress.',
+              message: 'Driver or vehicle already has a trip in progress.',
               details: { activeTripId: null },
             });
       }
