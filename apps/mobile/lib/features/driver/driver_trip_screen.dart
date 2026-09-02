@@ -128,6 +128,9 @@ class _TripDetailContent extends StatelessWidget {
     if (detail.status == DriverTripStatus.inProgress) {
       return _InProgressTripView(detail: detail, onEnd: onEnd, onSendSos: onSendSos);
     }
+    if (detail.status == DriverTripStatus.scheduled) {
+      return _ScheduledTripView(detail: detail, onStart: onStart);
+    }
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -138,48 +141,158 @@ class _TripDetailContent extends StatelessWidget {
           Text('Trip status: ${detail.status.name}'),
           Text('Direction: ${detail.direction}'),
           Text('Passengers expected: ${detail.passengerSummary.expected}'),
-          const SizedBox(height: 16),
-          if (detail.status == DriverTripStatus.scheduled)
-            ElevatedButton(
-              onPressed: () async {
-                final confirmed = await showModalBottomSheet<bool>(
-                  context: context,
-                  builder: (sheetContext) => Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        Text(
-                          'Confirm start trip',
-                          style: Theme.of(sheetContext).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(detail.routeName),
-                        Text(
-                          'Passengers expected: ${detail.passengerSummary.expected}',
-                        ),
-                        const SizedBox(height: 16),
-                        FilledButton(
-                          onPressed: () => Navigator.of(sheetContext).pop(true),
-                          child: const Text('Confirm start'),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-                if (confirmed == true) await onStart();
-              },
-              child: const Text('Start trip'),
-            ),
         ],
       ),
     );
   }
 }
 
-// Loading, retry, and completed/cancelled/scheduled detail all share the plain
-// text layout above; only in_progress needs the map-dominant operational view.
+class _ScheduledTripView extends StatelessWidget {
+  const _ScheduledTripView({required this.detail, required this.onStart});
+
+  final DriverTripDetail detail;
+  final Future<void> Function() onStart;
+
+  @override
+  Widget build(BuildContext context) {
+    return TripStatusShell(
+      mapPolicy: TripMapPolicy.from(detail),
+      badgeLabel: 'Scheduled',
+      badgeColor: Theme.of(context).colorScheme.primary,
+      chipsRow: _ScheduledInfoColumn(detail: detail),
+      bottomPanel: _ScheduledBottomPanel(detail: detail, onStart: onStart),
+    );
+  }
+}
+
+class _ScheduledInfoColumn extends StatelessWidget {
+  const _ScheduledInfoColumn({required this.detail});
+
+  final DriverTripDetail detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.all(Radius.circular(16)),
+          ),
+          child: Text(
+            detail.routeName,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: <Widget>[
+            _ScheduledInfoChip(text: formatTripSchedule(detail.scheduledStart)),
+            _ScheduledInfoChip(
+              text: 'Passengers expected: ${detail.passengerSummary.expected}',
+            ),
+            _ScheduledInfoChip(text: formatTripDirection(detail.direction)),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ScheduledInfoChip extends StatelessWidget {
+  const _ScheduledInfoChip({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.all(Radius.circular(16)),
+      ),
+      child: Text(text, style: Theme.of(context).textTheme.bodySmall),
+    );
+  }
+}
+
+class _ScheduledBottomPanel extends StatelessWidget {
+  const _ScheduledBottomPanel({required this.detail, required this.onStart});
+
+  final DriverTripDetail detail;
+  final Future<void> Function() onStart;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Theme.of(context).colorScheme.surface,
+      elevation: 8,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: SizedBox(
+            height: 48,
+            child: FilledButton(
+              onPressed: () async {
+                final confirmed = await showModalBottomSheet<bool>(
+                  context: context,
+                  builder: (sheetContext) =>
+                      _StartTripConfirmationSheet(detail: detail),
+                );
+                if (confirmed == true) await onStart();
+              },
+              child: const Text('Start trip'),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Its own widget so Phase C can extend it with student-onboarding UI without
+// touching the caller.
+class _StartTripConfirmationSheet extends StatelessWidget {
+  const _StartTripConfirmationSheet({required this.detail});
+
+  final DriverTripDetail detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Text(
+            'Confirm start trip',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          Text(detail.routeName),
+          Text('Passengers expected: ${detail.passengerSummary.expected}'),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Confirm start'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Loading, retry, completed, and cancelled detail share the plain text layout
+// above; scheduled uses _ScheduledTripView and in_progress uses this shell.
 class _InProgressTripView extends StatelessWidget {
   const _InProgressTripView({
     required this.detail,

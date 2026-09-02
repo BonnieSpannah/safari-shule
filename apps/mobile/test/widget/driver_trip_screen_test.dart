@@ -159,6 +159,34 @@ void main() {
     expect(find.text('SOS'), findsNothing);
   });
 
+  testWidgets(
+    'scheduled trip view shows planned route, schedule chip, and start action',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            apiClientProvider.overrideWithValue(
+              _dioReturning(
+                (_) =>
+                    _tripDetailResponse('trip-scheduled-shell', 'scheduled'),
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            home: DriverTripScreen(tripId: 'trip-scheduled-shell'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Scheduled'), findsOneWidget);
+      expect(find.textContaining('Passengers'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Start trip'), findsOneWidget);
+      final map = tester.widget<DriverTripMap>(find.byType(DriverTripMap));
+      expect(map.compact, isFalse);
+    },
+  );
+
   testWidgets('scheduled trip requires confirmation before starting', (
     WidgetTester tester,
   ) async {
@@ -576,7 +604,7 @@ void main() {
     );
 
     await tester.pumpAndSettle();
-    expect(find.text('Trip status: scheduled'), findsOneWidget);
+    expect(find.text('Scheduled'), findsOneWidget);
 
     await tester.tap(find.text('Start trip'));
     await tester.pumpAndSettle();
