@@ -192,6 +192,7 @@ void main() {
       ProviderScope(
         overrides: [
           sessionNotifierProvider.overrideWith(_DriverSessionNotifier.new),
+          apiClientProvider.overrideWithValue(_safeDio()),
         ],
         child: const _TestApp(),
       ),
@@ -208,6 +209,7 @@ void main() {
       ProviderScope(
         overrides: [
           sessionNotifierProvider.overrideWith(_DriverSessionNotifier.new),
+          apiClientProvider.overrideWithValue(_safeDio()),
         ],
         child: Consumer(
           builder: (context, ref, child) {
@@ -247,6 +249,7 @@ void main() {
       ProviderScope(
         overrides: [
           sessionNotifierProvider.overrideWith(_DriverSessionNotifier.new),
+          apiClientProvider.overrideWithValue(_safeDio()),
         ],
         child: Consumer(
           builder: (context, ref, child) {

@@ -1,7 +1,9 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/app/app_router.dart';
+import 'package:mobile/core/api/client.dart';
 import 'package:mobile/core/auth/session.dart';
 import 'package:mobile/core/auth/session_models.dart';
 
@@ -39,6 +41,7 @@ void main() {
       ProviderScope(
         overrides: [
           sessionNotifierProvider.overrideWith(_DriverSessionNotifier.new),
+          apiClientProvider.overrideWithValue(_safeDio()),
         ],
         child: const _TestApp(),
       ),
@@ -53,4 +56,26 @@ void main() {
     final tenantRoleTop = tester.getTopLeft(find.text('Sunshine School · Driver')).dy;
     expect(brandTop, lessThan(tenantRoleTop));
   });
+}
+
+// Resolves every request instantly so widgets that read the real
+// apiClientProvider (e.g. the dashboard's active/upcoming trip cards) never
+// make a real network call, which would otherwise leave a Dio retry/timeout
+// Timer pending past pumpAndSettle().
+Dio _safeDio() {
+  final dio = Dio();
+  dio.interceptors.add(
+    InterceptorsWrapper(
+      onRequest: (options, handler) {
+        handler.resolve(
+          Response<Map<String, Object?>>(
+            requestOptions: options,
+            statusCode: 200,
+            data: const <String, Object?>{},
+          ),
+        );
+      },
+    ),
+  );
+  return dio;
 }

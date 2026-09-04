@@ -146,17 +146,17 @@ class InfoChipsRow extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: <Widget>[
-        _InfoChip(text: elapsedLabel),
-        _InfoChip(text: vehicleRegistration ?? 'Vehicle unavailable'),
-        _InfoChip(text: directionLabel),
-        _InfoChip(text: gpsHealthLabel),
+        InfoChip(text: elapsedLabel),
+        InfoChip(text: vehicleRegistration ?? 'Vehicle unavailable'),
+        InfoChip(text: directionLabel),
+        InfoChip(text: gpsHealthLabel),
       ],
     );
   }
 }
 
-class _InfoChip extends StatelessWidget {
-  const _InfoChip({required this.text});
+class InfoChip extends StatelessWidget {
+  const InfoChip({super.key, required this.text});
   final String text;
 
   @override

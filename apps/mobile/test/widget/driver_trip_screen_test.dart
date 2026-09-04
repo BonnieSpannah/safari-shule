@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -652,6 +654,160 @@ void main() {
 
       expect(alightBody, <String, Object?>{'admissionNumber': 'ADM-2'});
     });
+
+    testWidgets(
+      'in-progress bottom panel can board a student mid-route',
+      (WidgetTester tester) async {
+        Map<String, Object?>? boardBody;
+        final dio = Dio();
+        dio.interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              if (options.path == '/trips/driver/trip-mid-board') {
+                handler.resolve(
+                  Response<Map<String, Object?>>(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: _tripDetailResponse('trip-mid-board', 'in_progress'),
+                  ),
+                );
+                return;
+              }
+              if (options.path == '/trips/trip-mid-board/board') {
+                boardBody = options.data as Map<String, Object?>;
+                handler.resolve(
+                  Response<void>(requestOptions: options, statusCode: 200),
+                );
+                return;
+              }
+              handler.resolve(
+                Response<void>(requestOptions: options, statusCode: 200),
+              );
+            },
+          ),
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [apiClientProvider.overrideWithValue(dio)],
+            child: const MaterialApp(
+              home: DriverTripScreen(tripId: 'trip-mid-board'),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Board student'));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.byKey(const Key('student-lookup-input')),
+          'ADM-3',
+        );
+        await _tapAndAwaitRealAsync(tester, find.text('Confirm'));
+
+        expect(boardBody, <String, Object?>{'admissionNumber': 'ADM-3'});
+      },
+    );
+
+    testWidgets(
+      'boarding a student after start shows the live passenger counts, not the stale start-of-trip snapshot',
+      (WidgetTester tester) async {
+        var status = 'scheduled';
+        var passengerSummary = <String, Object?>{
+          'expected': 3,
+          'boarded': 0,
+          'onBoard': 0,
+          'alighted': 0,
+        };
+        final dio = Dio();
+        dio.interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              if (options.method == 'GET' &&
+                  options.path == '/trips/driver/trip-live-counts') {
+                handler.resolve(
+                  Response<Map<String, Object?>>(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: _tripDetailResponse(
+                      'trip-live-counts',
+                      status,
+                      passengerSummary: passengerSummary,
+                    ),
+                  ),
+                );
+                return;
+              }
+              if (options.path.endsWith('/driver-start')) {
+                status = 'in_progress';
+                handler.resolve(
+                  Response<Map<String, Object?>>(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: _tripDetailResponse(
+                      'trip-live-counts',
+                      status,
+                      passengerSummary: passengerSummary,
+                    ),
+                  ),
+                );
+                return;
+              }
+              if (options.path == '/trips/trip-live-counts/board') {
+                passengerSummary = <String, Object?>{
+                  'expected': 3,
+                  'boarded': 1,
+                  'onBoard': 1,
+                  'alighted': 0,
+                };
+                handler.resolve(
+                  Response<void>(requestOptions: options, statusCode: 200),
+                );
+                return;
+              }
+              handler.resolve(
+                Response<void>(requestOptions: options, statusCode: 200),
+              );
+            },
+          ),
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              apiClientProvider.overrideWithValue(dio),
+              tripTelemetryProvider.overrideWithValue(_FakeTelemetryService()),
+            ],
+            child: const MaterialApp(
+              home: DriverTripScreen(tripId: 'trip-live-counts'),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Start trip'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Confirm start'));
+        await tester.pumpAndSettle();
+
+        // Before boarding: boarded/onBoard/alighted all read 0.
+        expect(find.text('0'), findsNWidgets(3));
+
+        await tester.tap(find.text('Board student'));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const Key('student-lookup-input')),
+          'ADM-9',
+        );
+        await _tapAndAwaitRealAsync(tester, find.text('Confirm'));
+
+        // After boarding: boarded and onBoard must reflect the fresh refetch
+        // (1 each), not the stale start-of-trip snapshot frozen at 0.
+        expect(find.text('1'), findsNWidgets(2));
+        expect(find.text('0'), findsOneWidget);
+      },
+    );
   });
 
   group('completed trip screen', () {
@@ -809,6 +965,86 @@ void main() {
     expect(telemetry.stopped, isTrue);
     expect(find.text('Completed'), findsOneWidget);
   });
+
+  testWidgets(
+    'starting a trip keeps showing In progress while the post-start refetch is still pending',
+    (WidgetTester tester) async {
+      var status = 'scheduled';
+      final refetchGate = Completer<void>();
+      var getCount = 0;
+      final dio = Dio();
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) async {
+            if (options.path == '/trips/driver/trip-bridge') {
+              getCount++;
+              // The first GET (initial load) resolves immediately; the
+              // second (the post-start refetch triggered by invalidate)
+              // is held open so the test can inspect the bridging window.
+              if (getCount > 1) {
+                await refetchGate.future;
+              }
+              handler.resolve(
+                Response<Map<String, Object?>>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: _tripDetailResponse('trip-bridge', status),
+                ),
+              );
+              return;
+            }
+            if (options.path.endsWith('/driver-start')) {
+              status = 'in_progress';
+              handler.resolve(
+                Response<Map<String, Object?>>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: _tripDetailResponse('trip-bridge', status),
+                ),
+              );
+              return;
+            }
+            handler.resolve(
+              Response<void>(requestOptions: options, statusCode: 200),
+            );
+          },
+        ),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            apiClientProvider.overrideWithValue(dio),
+            tripTelemetryProvider.overrideWithValue(_FakeTelemetryService()),
+          ],
+          child: const MaterialApp(
+            home: DriverTripScreen(tripId: 'trip-bridge'),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Start trip'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirm start'));
+
+      // The driver-start POST already resolved (setting the confirmed
+      // snapshot); the follow-up GET refetch is still gated open. A few
+      // bounded pumps settle the confirmation sheet and rebuild without
+      // waiting on the still-pending refetch.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.text('In progress'), findsOneWidget);
+      expect(find.text('Scheduled'), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+
+      refetchGate.complete();
+      await tester.pumpAndSettle();
+
+      expect(find.text('In progress'), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'starting a trip shows a friendly message when the server reports another active trip',

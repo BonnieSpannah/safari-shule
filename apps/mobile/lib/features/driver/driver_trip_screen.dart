@@ -66,13 +66,29 @@ class _DriverTripScreenState extends ConsumerState<DriverTripScreen> {
   @override
   Widget build(BuildContext context) {
     final detailAsync = ref.watch(driverTripDetailProvider(widget.tripId));
-    final detail =
-        _confirmedDetail ??
-        detailAsync.when(
-          data: (value) => value,
-          loading: () => null,
-          error: (_, _) => null,
-        );
+    ref.listen<AsyncValue<DriverTripDetail>>(driverTripDetailProvider(widget.tripId), (
+      previous,
+      next,
+    ) {
+      // Once the provider has settled with its own data, the start/end
+      // snapshot has done its job -- drop it so a later loading/error state
+      // can't fall back to it forever (Riverpod's `when(loading: ...)`
+      // defaults to skipping the loading branch on a refresh and instead
+      // re-emits the PREVIOUS value while refetching, so relying on
+      // nullability alone to detect "still loading" doesn't work).
+      if (!next.isLoading && next.hasValue && _confirmedDetail != null) {
+        setState(() => _confirmedDetail = null);
+      }
+    });
+    // While the provider is (re)loading right after start/end, prefer the
+    // just-confirmed snapshot over whatever stale value Riverpod is still
+    // retaining from before the transition. Once settled -- with data OR
+    // with an error -- the provider's own retained value is the source of
+    // truth (`value` survives errors too, so a refetch failure keeps
+    // showing the last good counts instead of the frozen start-of-trip ones).
+    final detail = detailAsync.isLoading
+        ? (_confirmedDetail ?? detailAsync.value)
+        : (detailAsync.value ?? _confirmedDetail);
     return Scaffold(
       body: detail == null
           ? detailAsync.when(
@@ -199,31 +215,14 @@ class _ScheduledInfoColumn extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: <Widget>[
-            _TripInfoChip(text: formatTripSchedule(detail.scheduledStart)),
-            _TripInfoChip(
+            InfoChip(text: formatTripSchedule(detail.scheduledStart)),
+            InfoChip(
               text: 'Passengers expected: ${detail.passengerSummary.expected}',
             ),
-            _TripInfoChip(text: formatTripDirection(detail.direction)),
+            InfoChip(text: formatTripDirection(detail.direction)),
           ],
         ),
       ],
-    );
-  }
-}
-
-class _TripInfoChip extends StatelessWidget {
-  const _TripInfoChip({required this.text});
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.all(Radius.circular(16)),
-      ),
-      child: Text(text, style: Theme.of(context).textTheme.bodySmall),
     );
   }
 }
@@ -287,7 +286,7 @@ class _StartTripConfirmationSheet extends ConsumerWidget {
           Text('Passengers expected: ${detail.passengerSummary.expected}'),
           const SizedBox(height: 16),
           OutlinedButton.icon(
-            icon: const Icon(Icons.qr_code_scanner),
+            icon: const Icon(Icons.person_add_alt_1),
             label: const Text('Board student'),
             onPressed: () => showModalBottomSheet<bool>(
               context: context,
@@ -328,15 +327,15 @@ class _CompletedTripView extends StatelessWidget {
         spacing: 8,
         runSpacing: 8,
         children: <Widget>[
-          _TripInfoChip(
+          InfoChip(
             text: duration != null
                 ? '${duration.inMinutes} min'
                 : 'Duration unavailable',
           ),
-          _TripInfoChip(
+          InfoChip(
             text: detail.vehicle?.registration ?? 'Vehicle unavailable',
           ),
-          _TripInfoChip(text: formatTripDirection(detail.direction)),
+          InfoChip(text: formatTripDirection(detail.direction)),
         ],
       ),
       bottomPanel: Material(
@@ -384,8 +383,8 @@ class _CancelledTripView extends StatelessWidget {
         spacing: 8,
         runSpacing: 8,
         children: <Widget>[
-          _TripInfoChip(text: formatTripSchedule(detail.scheduledStart)),
-          _TripInfoChip(text: formatTripDirection(detail.direction)),
+          InfoChip(text: formatTripSchedule(detail.scheduledStart)),
+          InfoChip(text: formatTripDirection(detail.direction)),
         ],
       ),
       bottomPanel: Material(
@@ -546,7 +545,25 @@ class _InProgressBottomPanelState
               SizedBox(
                 height: 48,
                 child: OutlinedButton.icon(
-                  icon: const Icon(Icons.qr_code_scanner),
+                  icon: const Icon(Icons.person_add_alt_1),
+                  label: const Text('Board student'),
+                  onPressed: () => showModalBottomSheet<bool>(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (_) => StudentLookupSheet(
+                      title: 'Board student',
+                      onSubmit: (admissionNumber) => ref.read(
+                        boardStudentProvider,
+                      )(detail.id, admissionNumber),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 48,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.person_remove_alt_1),
                   label: const Text('Alight student'),
                   onPressed: () => showModalBottomSheet<bool>(
                     context: context,

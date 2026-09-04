@@ -23,7 +23,14 @@ class SessionStorage {
     if (payload is! Map<String, Object?>) {
       return null;
     }
-    return Session.fromJson(payload);
+    try {
+      return Session.fromJson(payload);
+    } on TypeError {
+      // A session written by an older build can be missing a field that's
+      // since become required (e.g. tenantName) — treat it as no session
+      // rather than crashing, forcing a fresh login.
+      return null;
+    }
   }
 
   Future<void> clear() => _storage.delete(key: _sessionKey);
