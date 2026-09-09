@@ -6,6 +6,7 @@ import { TripGateway } from '../telemetry/trip.gateway';
 import { paginated, buildPagination } from '../../common/pagination/pagination';
 import { getContext, requireTenantId, runWithBypass } from '../../common/context/request-context';
 import { renderTemplate } from '../../comms/templates/registry';
+import { tripActorWhere } from '../trips/trip-actor';
 import type { IncidentInput, LatLng, PaginationQuery } from '@safari-shule/shared-types';
 
 @Injectable()
@@ -142,10 +143,15 @@ export class IncidentsService {
     });
   }
 
-  async sos(input: { tripId: string; location: LatLng; description?: string }) {
+  async sos(input: { tripId: string; location: LatLng; description?: string; actorUserId?: string }) {
     const tenantId = requireTenantId();
+    const actorUserId = input.actorUserId ?? getContext()?.userId;
     const trip = await this.prisma.trip.findFirst({
-      where: { id: input.tripId },
+      where: {
+        id: input.tripId,
+        tenantId,
+        ...(actorUserId ? tripActorWhere(actorUserId) : {}),
+      },
       include: { vehicle: true, route: true },
     });
     if (!trip) throw new NotFoundException();

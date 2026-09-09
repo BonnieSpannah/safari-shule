@@ -6,6 +6,7 @@ import 'package:mobile/features/auth/login_screen.dart';
 import 'package:mobile/features/caretaker/assistant_dashboard_screen.dart';
 import 'package:mobile/features/caretaker/assistant_scan_screen.dart';
 import 'package:mobile/features/caretaker/assistant_shell.dart';
+import 'package:mobile/features/caretaker/assistant_trip_screen.dart';
 import 'package:mobile/features/driver/driver_dashboard_screen.dart';
 import 'package:mobile/features/driver/driver_recent_trips_screen.dart';
 import 'package:mobile/features/driver/driver_shell.dart';
@@ -97,6 +98,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/assistant/dashboard',
             builder: (_, state) => const AssistantDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/assistant/trip/:id',
+            builder: (_, state) =>
+                AssistantTripScreen(tripId: state.pathParameters['id'] ?? ''),
           ),
           GoRoute(
             path: '/assistant/scan',

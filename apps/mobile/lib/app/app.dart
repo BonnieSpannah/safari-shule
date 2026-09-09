@@ -77,7 +77,7 @@ class _SafariShuleAppState extends ConsumerState<SafariShuleApp>
       if (session == null) {
         _pushInitialized = false;
         ref.invalidate(driverWorkspaceProvider);
-        unawaited(ref.read(tripTelemetryProvider).stop());
+        unawaited(ref.read(tripTelemetryProvider).stop().catchError((_) {}));
       }
     });
 

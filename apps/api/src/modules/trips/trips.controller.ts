@@ -64,6 +64,18 @@ export class TripsController {
     return this.svc.driverDetail(id, requireAuthenticatedUserId(req));
   }
 
+  @Get('assistant-workspace')
+  @RequirePermission('trips.view')
+  assistantWorkspace(@Req() req: Request) {
+    return this.svc.assistantWorkspace(requireAuthenticatedUserId(req));
+  }
+
+  @Get('assistant/:id')
+  @RequirePermission('trips.view')
+  assistantDetail(@Param('id') id: string, @Req() req: Request) {
+    return this.svc.assistantDetail(id, requireAuthenticatedUserId(req));
+  }
+
   @Get(':id')
   @RequirePermission('trips.view')
   one(@Param('id') id: string) {

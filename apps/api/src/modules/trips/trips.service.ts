@@ -5,6 +5,7 @@ import { paginated, buildPagination } from '../../common/pagination/pagination';
 import { requireTenantId } from '../../common/context/request-context';
 import { CommunicationsService } from '../../comms/communications.service';
 import { renderTemplate } from '../../comms/templates/registry';
+import { tripActorWhere } from './trip-actor';
 import { ERROR_CODES } from '@safari-shule/shared-types';
 import type { TripInput, PaginationQuery } from '@safari-shule/shared-types';
 
@@ -18,6 +19,14 @@ export class TripsService {
   ) {}
 
   async driverWorkspace(driverUserId: string) {
+    return this.workspaceFor('driverUserId', driverUserId);
+  }
+
+  async assistantWorkspace(assistantUserId: string) {
+    return this.workspaceFor('assistantUserId', assistantUserId);
+  }
+
+  private async workspaceFor(assignmentField: 'driverUserId' | 'assistantUserId', actorUserId: string) {
     const tenantId = requireTenantId();
     const summaryInclude = {
       route: { select: { id: true, name: true } },
@@ -27,16 +36,20 @@ export class TripsService {
 
     const [activeTrip, upcomingTrips, recentTrips] = await Promise.all([
       this.prisma.trip.findFirst({
-        where: { tenantId, driverUserId, status: TripStatus.in_progress },
+        where: { tenantId, [assignmentField]: actorUserId, status: TripStatus.in_progress },
         include: summaryInclude,
       }),
       this.prisma.trip.findMany({
-        where: { tenantId, driverUserId, status: TripStatus.scheduled },
+        where: { tenantId, [assignmentField]: actorUserId, status: TripStatus.scheduled },
         include: summaryInclude,
         orderBy: { scheduledStart: 'asc' },
       }),
       this.prisma.trip.findMany({
-        where: { tenantId, driverUserId, status: { in: [TripStatus.completed, TripStatus.cancelled] } },
+        where: {
+          tenantId,
+          [assignmentField]: actorUserId,
+          status: { in: [TripStatus.completed, TripStatus.cancelled] },
+        },
         include: summaryInclude,
         orderBy: [{ endedAt: 'desc' }, { scheduledStart: 'desc' }],
         take: 20,
@@ -47,9 +60,21 @@ export class TripsService {
   }
 
   async driverDetail(id: string, driverUserId: string) {
+    return this.tripDetailFor(id, 'driverUserId', driverUserId);
+  }
+
+  async assistantDetail(id: string, assistantUserId: string) {
+    return this.tripDetailFor(id, 'assistantUserId', assistantUserId);
+  }
+
+  private async tripDetailFor(
+    id: string,
+    assignmentField: 'driverUserId' | 'assistantUserId',
+    actorUserId: string,
+  ) {
     const tenantId = requireTenantId();
     const trip = await this.prisma.trip.findFirst({
-      where: { id, driverUserId, tenantId },
+      where: { id, tenantId, [assignmentField]: actorUserId },
       include: {
         vehicle: { select: { id: true, registration: true, capacity: true } },
         passengers: true,
@@ -410,8 +435,9 @@ export class TripsService {
     return this.startTrip(id);
   }
 
-  startForAssignedDriver(id: string, driverUserId: string) {
-    return this.startTrip(id, driverUserId);
+  async startForAssignedDriver(id: string, driverUserId: string) {
+    await this.startTrip(id, driverUserId);
+    return this.driverDetail(id, driverUserId);
   }
 
   async end(id: string) {
@@ -428,10 +454,11 @@ export class TripsService {
     const trip = await this.prisma.trip.findFirst({ where: { id, driverUserId } });
     if (!trip) throw new NotFoundException();
     if (trip.status !== 'in_progress') throw new BadRequestException({ code: 'TRIP_NOT_IN_PROGRESS' });
-    return this.prisma.trip.update({
+    await this.prisma.trip.update({
       where: { id },
       data: { status: 'completed' as any, endedAt: new Date() },
     });
+    return this.driverDetail(id, driverUserId);
   }
 
   async cancel(id: string, reason: string) {
@@ -446,9 +473,11 @@ export class TripsService {
     });
   }
 
-  private async loadOwnedTrip(tripId: string, driverUserId: string) {
+  private async loadActorTrip(tripId: string, actorUserId: string) {
     const tenantId = requireTenantId();
-    const trip = await this.prisma.trip.findFirst({ where: { id: tripId, driverUserId, tenantId } });
+    const trip = await this.prisma.trip.findFirst({
+      where: { id: tripId, tenantId, ...tripActorWhere(actorUserId) },
+    });
     if (!trip) throw new NotFoundException();
     return trip;
   }
@@ -462,8 +491,8 @@ export class TripsService {
     return student;
   }
 
-  async boardPassenger(tripId: string, driverUserId: string, admissionNumber: string) {
-    const trip = await this.loadOwnedTrip(tripId, driverUserId);
+  async boardPassenger(tripId: string, actorUserId: string, admissionNumber: string) {
+    const trip = await this.loadActorTrip(tripId, actorUserId);
     if (trip.status !== 'scheduled' && trip.status !== 'in_progress') {
       throw new BadRequestException({ code: ERROR_CODES.TRIP_NOT_BOARDABLE });
     }
@@ -490,8 +519,8 @@ export class TripsService {
     };
   }
 
-  async alightPassenger(tripId: string, driverUserId: string, admissionNumber: string) {
-    const trip = await this.loadOwnedTrip(tripId, driverUserId);
+  async alightPassenger(tripId: string, actorUserId: string, admissionNumber: string) {
+    const trip = await this.loadActorTrip(tripId, actorUserId);
     if (trip.status !== 'in_progress') throw new BadRequestException({ code: ERROR_CODES.TRIP_NOT_IN_PROGRESS });
     const student = await this.findStudentByAdmissionNumber(trip.tenantId, admissionNumber);
     const passenger = await this.prisma.tripPassenger.findFirst({

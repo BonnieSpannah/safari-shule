@@ -1,5 +1,6 @@
-import { Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
+import { Controller, Get, HttpCode, HttpStatus, Param, Post, Req, UnauthorizedException } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import type { Request } from 'express';
 import { z } from 'zod';
 import {
   incidentInput,
@@ -66,10 +67,14 @@ export class IncidentsController {
   @HttpCode(HttpStatus.ACCEPTED)
   @RequirePermission('incidents.report')
   @Audited({ action: 'incident.sos', entityType: 'trip', entityIdParam: 'id' })
-  sos(@Param('id') id: string, @ZodBody(sosInput) body: z.infer<typeof sosInput>) {
-    if (!body.location) {
-      return this.svc.sos({ tripId: id, location: { lat: 0, lng: 0 }, description: body.description });
+  sos(@Param('id') id: string, @ZodBody(sosInput) body: z.infer<typeof sosInput>, @Req() req: Request) {
+    const user = req.user as { userId?: string } | undefined;
+    if (!user?.userId) {
+      throw new UnauthorizedException('Authenticated user is unavailable.');
     }
-    return this.svc.sos({ tripId: id, location: body.location, description: body.description });
+    if (!body.location) {
+      return this.svc.sos({ tripId: id, location: { lat: 0, lng: 0 }, description: body.description, actorUserId: user.userId });
+    }
+    return this.svc.sos({ tripId: id, location: body.location, description: body.description, actorUserId: user.userId });
   }
 }

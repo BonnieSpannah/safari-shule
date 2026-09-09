@@ -17,6 +17,7 @@ export interface SeededTenant {
   adminAccessToken: string;
   driverUserId: string;
   driverAccessToken: string;
+  assistant?: { userId: string; accessToken: string };
   device?: { id: string; deviceId: string; apiKey: string; hmacSecret: string; vehicleId: string };
 }
 
@@ -52,7 +53,7 @@ export async function seedTenantWithRoles(
   tenantAdmin: TenantAdminService,
   auth: AuthService,
   prefix: string,
-  opts: { withDevice?: boolean } = {},
+  opts: { withDevice?: boolean; withAssistant?: boolean } = {},
 ): Promise<SeededTenant> {
   const slug = `${prefix}-${randomBytes(3).toString('hex')}`;
   const { tenant } = await tenantAdmin.createTenant({
@@ -102,6 +103,32 @@ export async function seedTenantWithRoles(
       fullName: driver.fullName,
     });
 
+    let assistant: SeededTenant['assistant'];
+    if (opts.withAssistant) {
+      const assistantRole = await prisma.role.findUniqueOrThrow({
+        where: { tenantId_key: { tenantId: tenant.id, key: 'assistant' } },
+      });
+      const assistantUser = await prisma.user.create({
+        data: {
+          tenantId: tenant.id,
+          email: `assistant@${slug}.test`,
+          passwordHash: await auth.hashPassword('Assistant!Pass1'),
+          status: 'active',
+          fullName: 'Test Assistant',
+        },
+      });
+      await prisma.userRole.create({
+        data: { tenantId: tenant.id, userId: assistantUser.id, roleId: assistantRole.id },
+      });
+      const assistantTokens = await auth.issueTokenPair({
+        id: assistantUser.id,
+        tenantId: tenant.id,
+        email: assistantUser.email,
+        fullName: assistantUser.fullName,
+      });
+      assistant = { userId: assistantUser.id, accessToken: assistantTokens.accessToken };
+    }
+
     let device: SeededTenant['device'];
     if (opts.withDevice) {
       const vehicle = await prisma.vehicle.create({
@@ -140,6 +167,7 @@ export async function seedTenantWithRoles(
       adminAccessToken: adminTokens.accessToken,
       driverUserId: driver.id,
       driverAccessToken: driverTokens.accessToken,
+      assistant,
       device,
     } satisfies SeededTenant;
   });

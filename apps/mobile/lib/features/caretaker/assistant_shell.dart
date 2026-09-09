@@ -19,7 +19,9 @@ class AssistantShell extends ConsumerWidget {
     ];
     const locations = <String>['/assistant/scan', '/assistant/dashboard', '/assistant/account'];
     final path = GoRouterState.of(context).uri.path;
-    final routeIndex = locations.indexOf(path);
+    final routeIndex = path.startsWith('/assistant/trip')
+        ? 1
+        : locations.indexWhere((location) => path.startsWith(location));
     final selectedIndex = routeIndex < 0 ? 0 : routeIndex;
 
     return AdaptiveScaffold(

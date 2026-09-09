@@ -65,24 +65,45 @@ Sequenced milestones from now to production-ready SaaS ERP for Kenyan schools. E
 - Daily M-Pesa reconciliation job (matches Safaricom statement CSV to `MpesaTransaction`)
 - Fee structures per class/route, invoice generation, statement of account per parent
 
-### M7 — Driver Trip Workflow (🚧 In Progress — Tasks 1–4 of 7 done)
+### M7 — Driver Trip Workflow (✅ Complete)
 
-Branch: `feat/m7-flutter-mobile`. See `docs/superpowers/specs/2026-09-01-driver-trip-workflow-design.md` for full design and `.superpowers/sdd/progress.md` for task-level progress.
+Branch: `feat/m7-flutter-mobile`. See `docs/superpowers/specs/2026-09-01-driver-trip-workflow-design.md` and `docs/superpowers/plans/2026-09-02-driver-experience-consolidated-plan.md` for full design; `.superpowers/sdd/progress.md` for full task-level evidence.
 
-- [x] DB invariant: one active trip per driver (partial unique index + `TRIP_ALREADY_ACTIVE` 409)
+- [x] DB invariant: one active trip per driver, and per vehicle (partial unique indexes + `TRIP_ALREADY_ACTIVE` 409 with `conflictType: 'driver'|'vehicle'`)
 - [x] Persisted cancellation reason on trips
-- [x] `GET /v1/trips/driver-workspace` — JWT-scoped, returns active/upcoming/recent (max 20) with PostGIS coords
-- [x] `GET /v1/trips/driver/:id` — owned detail with route control points, passenger counts, telemetry snapshots
-- [x] Typed Flutter domain models: `DriverWorkspace`, `DriverTripDetail`, `TripLocationSnapshot`, exhaustive status/action/map policy (73 tests)
-- [x] Task-first driver dashboard: active trip owns screen with compact map + **Resume trip**; next scheduled fallback; login empty-tenant guard
-- [ ] Status-aware trip detail + 4 map layer modes (planned / live / travelled / partial) ← **next**
-- [ ] Idempotent telemetry + lifecycle coordinator (login → resume → logout)
-- [ ] Full suite + Android emulator walkthrough + confirm + merge
+- [x] `GET /v1/trips/driver-workspace` / `GET /v1/trips/driver/:id` — JWT-scoped active/upcoming/recent + owned detail
+- [x] Typed Flutter domain models, task-first driver dashboard with live map previews on every card
+- [x] Status-aware trip detail unified across scheduled/in_progress/completed/cancelled — one shared `TripStatusShell` (map + badge + chips + bottom panel), no plain-text view remains
+- [x] Driver-initiated student boarding/alighting (`POST /v1/trips/:id/board` / `/alight`, admission-number entry, parent SMS on both directions) — wired into the start-trip sheet (pre-start + mid-route) and the in-progress panel
+- [x] Vehicle-level one-active-trip invariant enforced end-to-end (API + web toast + mobile SnackBar), with a real bug found and fixed along the way: mobile's active-trip-conflict parsing had never actually worked since the field was read from the wrong JSON path
+- [x] Mobile branding: tenant display name flows through session → app bar → account page → redesigned centered login screen (driver role only so far — assistant/parent shells still show the raw tenant slug, a known follow-up)
+- [x] Idempotent telemetry + lifecycle coordinator (login → resume → logout) for background GPS tracking
+- [x] Full mobile (169/169) + API (build/typecheck/e2e) + web (85/85) verification, plus a final whole-branch review that caught and fixed 3 cross-task integration issues (frozen passenger counts after start, no mid-route boarding UI despite the API allowing it, a repeated test-hygiene risk)
+- [ ] Manual Android emulator walkthrough — still recommended before considering this fully shipped
+- **Known, deliberately deferred gap**: RFID-scan attendance (`AttendanceEvent` table, via `HardwareService`) and driver/assistant-manual attendance (`TripPassenger.boardedAt`/`alightedAt`, via the new board/alight endpoints) are two separate ledgers that don't cross-reference each other. Decision (2026-09-07): treat this as a known gap for now — manual entry is used to _simulate_ attendance for testing across driver and assistant roles while RFID hardware isn't available in the test environment. The two should eventually behave as **alternative input methods for the same action**, not independently-tracked processes; reconciling them (likely via a shared attendance-recording path, or making `AttendanceEvent`'s `deviceId`/`tagId` nullable so manual entries can write there too) is intentionally out of scope until after assistant workflows and comprehensive end-to-end testing.
 
-### M8 — Mobile: Remaining Driver + Assistant + Parent Flows
+### M7.5 — Assistant Trip Workflows (✅ Complete)
+
+Practical goal: an assistant (e.g. a teacher riding along to help manage students) assigned to a trip can see it, send an SOS, and board/alight students — everything except starting/ending the trip itself, which stays driver-only. Reuses the driver-side work from M7 rather than duplicating it. See `docs/superpowers/plans/2026-09-07-assistant-trip-workflows.md` for the full implementation plan and completion evidence.
+
+- [x] Board/alight ownership check generalized via shared `tripActorWhere(userId)` predicate (`src/modules/trips/trip-actor.ts`) — an assistant assigned to a trip gets the same `POST /trips/:id/board`/`/alight` access as the driver
+- [x] `GET /v1/trips/assistant-workspace` and `GET /v1/trips/assistant/:id`, reusing the same underlying query logic as `driverWorkspace`/`driverDetail`
+- [x] SOS endpoint (`POST /trips/:id/sos`) now validates the trip exists, is tenant-scoped, and the caller is the assigned driver or assistant — closes a real gap where any user with `incidents.report` could previously SOS an arbitrary/nonexistent trip id
+- [x] Mobile: real assistant dashboard ("my assigned trip", single-trip focus) replacing the old stub; `AssistantTripScreen` composes the same map/badge/chips/board/alight/SOS UI as the driver's, without Start/End actions; assistant shell's "Trips" tab wired with prefix-based route matching (`/assistant/trip/:id` correctly highlights the Trips tab)
+- [x] New API e2e coverage (`assistant-trip-workflow.e2e-spec.ts`): assistant can view/board/alight/SOS their assigned trip, 404 with no leak for unassigned trips, driver-only start/end unaffected — plus full regression pass (6 suites / 29+ tests) confirming zero impact on driver flows
+- [x] Full manual e2e verification across API + web + mobile (Chrome target, no Android/iOS toolchain available in this environment): real login as seeded driver and assistant users, real trip start/board/alight/SOS, cross-checked live on the web Trips/Incidents pages
+- [x] **Real bug found and fixed during manual testing**: `POST /trips/:id/driver-start` and `/driver-end` were returning a bare `Trip` row instead of the enriched `DriverTripDetail` shape the mobile client expects, causing a client-side parse failure (`FormatException: missing route`) that desynced the UI from actual server state (trip started successfully server-side, but the driver app kept showing "Scheduled"). Fixed by having both endpoints return `driverDetail()` after the status update — same enrichment logic already used by `GET /trips/driver/:id`, no duplication, no impact on web's admin start/end (which ignores the response body).
+- [x] **Real bug found and fixed during manual testing**: mobile app crashed on cold start when run on a web/Chrome target — `app.dart`'s session listener called `tripTelemetryProvider.stop()` unguarded (fire-and-forget, no `.catchError`) whenever the session was null, and the native-only geolocation plugin has no web implementation. Fixed with the same `.catchError` pattern already used for push notifications two lines above.
+- [ ] **Known, newly-discovered gap (not fixed, flagged for follow-up)**: after a forced password change (`mustChangePassword`), the web app's `ProtectedRoute` reads a stale `mustChangePassword` flag from the persisted Zustand auth store, which the change-password mutation never refreshes — users get bounced back to `/me/security` on every navigation until they log out and back in. Affects every role, not specific to M7.5. Not fixed in this milestone — needs its own decision/PR.
+- [ ] Manual Android/iOS emulator or physical-device walkthrough — still recommended; this environment had no Android SDK cmdline-tools/licenses or iOS Simulator runtime installed, so verification here used the Flutter Chrome (web) target, which exercises the same Dart code/API calls but not native platform behavior (background GPS, NFC, biometrics)
+
+### M8 — Mobile: Remaining Parent Flows + Comprehensive Activity Logging
+
+Deferred until after M7.5 (assistant workflows) and a comprehensive end-to-end test pass across driver + assistant + trips, per user decision 2026-09-07.
 
 - Full details in [MOBILE.md](MOBILE.md)
-- Driver + Assistant + Parent shells in the same binary
+- Parent shell: login by email, live trip tracking for their child(ren), board/alight visibility, admin-controlled invite flow mirroring the existing staff invite/activation pattern (see `/memories/repo/parent-portal-future-feature.md` for the full captured requirement)
+- Comprehensive activity/audit logging spanning web + API + mobile + system/background/scheduled actions — who did what, when, where, and via which platform/channel, with a concrete data-integrity approach (design not yet started)
 - Offline outbox (Hive) + Drift local cache
 - SOS works offline (buffered, resent on reconnect)
 - NFC on Android/iOS, camera QR fallback on web/desktop
