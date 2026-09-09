@@ -24,7 +24,7 @@
 1. **`driver-start`/`driver-end` response-shape mismatch** — these endpoints returned a bare `Trip` row; the mobile client's `DriverTripDetail.fromJson` requires an enriched shape (`route`, `vehicle`, `passengerSummary`), causing a client-side crash that desynced the UI from real server state (trip actually started, UI kept showing "Scheduled"). Fixed: both endpoints now return `driverDetail()` after the update. Regression-verified: 5 e2e suites / 36 tests passing.
 2. **Mobile app crash on cold start (web/Chrome target only)** — `apps/mobile/lib/app/app.dart`'s session listener called `tripTelemetryProvider.stop()` unguarded; the native-only geolocation plugin throws on web. Fixed with `.catchError((_) {})`, matching the existing pattern for push notifications.
 
-**Known gap found, NOT fixed (flagged for separate follow-up):** web's `ProtectedRoute` reads a stale `mustChangePassword` flag from the persisted auth store that the change-password mutation never refreshes, causing a bounce-back loop until logout/login. Affects all roles, pre-existing, unrelated to M7.5 scope.
+**Follow-up fixed (2026-09-09):** web's `ProtectedRoute` no longer reads a stale `mustChangePassword` flag after a successful password change. `SecurityPage` synchronizes both the persisted auth user and the shared React Query `/me` cache before navigating, with a focused regression test covering the forced-password state transition. Live browser smoke verification used a disposable forced-rotation account: login landed on `/me/security`, the required-password form completed successfully, and a fresh session navigated to `/students` without a forced-password redirect.
 
 **Verification evidence:**
 

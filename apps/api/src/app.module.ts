@@ -22,6 +22,7 @@ import { FeatureFlagsModule } from './feature-flags/feature-flags.module';
 import { FeatureGuard } from './feature-flags/feature.guard';
 import { AuditModule } from './audit/audit.module';
 import { AuditInterceptor } from './audit/audit.interceptor';
+import { ActivityModule } from './audit/activity/activity.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 
@@ -76,6 +77,7 @@ import { DashboardController } from './modules/dashboard/dashboard.controller';
     RbacModule,
     FeatureFlagsModule,
     AuditModule,
+    ActivityModule,
     AuthModule,
     CommsModule,
     HealthModule,

@@ -25,8 +25,14 @@ vi.mock('@/lib/api/me', () => ({
 
 import { ProfilePage } from '../me/ProfilePage';
 import { PreferencesPage } from '../me/PreferencesPage';
+import { SecurityPage } from '../me/SecurityPage';
 import { fetchMe } from '@/lib/api/auth';
-import { getPreferences, updatePreferences, updateProfile } from '@/lib/api/me';
+import {
+  changePassword,
+  getPreferences,
+  updatePreferences,
+  updateProfile,
+} from '@/lib/api/me';
 import { useAuthStore } from '@/stores/auth.store';
 import { DEFAULT_PREFERENCES } from '@safari-shule/shared-types';
 
@@ -138,5 +144,30 @@ describe('PreferencesPage', () => {
         expect.objectContaining({ theme: 'dark' }),
       ),
     );
+  });
+});
+
+describe('SecurityPage', () => {
+  beforeEach(() => {
+    useAuthStore.getState().clear();
+    useAuthStore.getState().setSession('access-token', 'refresh-token', {
+      ...ME,
+      mustChangePassword: true,
+    });
+    vi.mocked(fetchMe).mockResolvedValue({ ...ME, mustChangePassword: true });
+    vi.mocked(changePassword).mockResolvedValue({ changedAt: new Date().toISOString() });
+  });
+
+  it('clears the forced-password flag in the auth store after changing password', async () => {
+    const user = userEvent.setup();
+    wrap(<SecurityPage />);
+
+    await user.type(screen.getByLabelText(/current password/i), 'Old!Password1');
+    await user.type(screen.getByLabelText(/^new password$/i), 'New!Password123');
+    await user.type(screen.getByLabelText(/confirm new password/i), 'New!Password123');
+    await user.click(screen.getByRole('button', { name: /update password/i }));
+
+    await waitFor(() => expect(changePassword).toHaveBeenCalled());
+    await waitFor(() => expect(useAuthStore.getState().user?.mustChangePassword).toBe(false));
   });
 });

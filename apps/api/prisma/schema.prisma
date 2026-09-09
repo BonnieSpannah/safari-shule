@@ -200,6 +200,7 @@ model Tenant {
   userRoles               UserRole[]
   features                TenantFeature[]
   auditLogs               AuditLog[]
+  activityEvents          ActivityEvent[]
   refreshTokens           RefreshToken[]
   otpCodes                OtpCode[]
   attributeDefs           AttributeDefinition[]
@@ -288,6 +289,7 @@ model User {
   userRoles       UserRole[]
   refreshTokens   RefreshToken[]
   auditLogs       AuditLog[]           @relation("AuditActor")
+  activityEvents  ActivityEvent[]      @relation("ActivityActor")
   invitationsSent Invitation[]         @relation("InvitationInviter")
   passwordHistory PasswordHistory[]
   staffProfile    Staff?               @relation("StaffUser")
@@ -1282,6 +1284,44 @@ enum ClientEventKind {
   role_switch
   impersonation_start
   impersonation_end
+}
+
+enum ActivityChannel {
+  web
+  mobile
+  api
+  system
+}
+
+model ActivityEvent {
+  id           String         @id @default(uuid()) @db.Uuid
+  tenantId     String         @db.Uuid
+  actorUserId  String?        @db.Uuid
+  channel      ActivityChannel
+  action       String
+  resourceType String?
+  resourceId   String?
+  occurredAt   DateTime       @default(now())
+  requestId    String?
+  traceId      String?
+  sessionId    String?
+  ipAddress    String?
+  userAgent    String?
+  metadata     Json?
+  sourceType   String?
+  sourceId     String?
+  createdAt    DateTime       @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actor  User?  @relation("ActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@unique([sourceType, sourceId])
+  @@index([tenantId, occurredAt(sort: Desc)])
+  @@index([tenantId, channel, occurredAt(sort: Desc)])
+  @@index([tenantId, action, occurredAt(sort: Desc)])
+  @@index([tenantId, resourceType, resourceId, occurredAt(sort: Desc)])
+  @@index([tenantId, actorUserId, occurredAt(sort: Desc)])
+  @@map("activity_events")
 }
 
 model ClientEvent {

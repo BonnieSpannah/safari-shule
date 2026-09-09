@@ -47,7 +47,6 @@ import { useAuthStore } from '@/stores/auth.store';
  */
 export function SecurityPage() {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const refreshToken = useAuthStore((s) => s.refreshToken);
   const [tokenHash, setTokenHash] = useState<string | null>(null);
 
@@ -117,6 +116,7 @@ function ChangePasswordCard({
   expiresInDays?: number;
 }) {
   const navigate = useNavigate();
+  const setUser = useAuthStore((s) => s.setUser);
   const form = useForm<ChangePasswordInput>({
     resolver: zodResolver(changePasswordSchema),
     mode: 'onChange',
@@ -129,6 +129,14 @@ function ChangePasswordCard({
   const mutation = useMutation({
     mutationFn: changePassword,
     onSuccess: () => {
+      const user = useAuthStore.getState().user;
+      if (user) {
+        const updatedUser = { ...user, mustChangePassword: false };
+        setUser(updatedUser);
+        queryClient.setQueryData(['me'], (cachedUser: typeof updatedUser | undefined) =>
+          cachedUser ? { ...cachedUser, mustChangePassword: false } : updatedUser,
+        );
+      }
       toast.success('Password updated.');
       form.reset({ currentPassword: '', newPassword: '', confirmPassword: '' });
       navigate('/');
