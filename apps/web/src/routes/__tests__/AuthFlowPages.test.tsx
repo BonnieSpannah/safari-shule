@@ -4,9 +4,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import type * as ClientApi from '@/lib/api/client';
 
 vi.mock('@/lib/api/client', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/api/client')>();
+  const actual = await importOriginal<typeof ClientApi>();
   return {
     ...actual,
     api: {

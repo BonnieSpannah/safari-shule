@@ -10,6 +10,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { RbacService } from '../rbac/rbac.service';
 import { paginated, buildPagination } from '../common/pagination/pagination';
 import { getContext, requireTenantId, runWithBypass } from '../common/context/request-context';
+import { ActivityService } from './activity/activity.service';
 
 const clientEventSchema = z.object({
   sessionId: z.string().max(120).optional(),
@@ -49,6 +50,7 @@ export class AuditController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rbac: RbacService,
+    private readonly activity: ActivityService,
   ) {}
 
   @Post('events')
@@ -59,7 +61,7 @@ export class AuditController {
     const ipAddress = req.ip ?? null;
     const userAgent = req.get('user-agent') ?? null;
 
-    await this.prisma.clientEvent.createMany({
+    const createdRows = await this.prisma.clientEvent.createMany({
       data: body.events.map((event) => ({
         tenantId,
         userId: ctx?.userId ?? null,
@@ -78,7 +80,30 @@ export class AuditController {
       skipDuplicates: false,
     });
 
-    return { accepted: body.events.length };
+    await Promise.all(body.events.map((event) =>
+      this.activity.recordSilent({
+        tenantId,
+        actorUserId: ctx?.userId ?? null,
+        channel: 'web',
+        action: event.kind,
+        resourceType: event.resource ?? null,
+        resourceId: event.resourceId ?? null,
+        requestId: ctx?.requestId ?? null,
+        traceId: event.traceId ?? ctx?.traceId ?? null,
+        sessionId: event.sessionId ?? ctx?.sessionId ?? null,
+        ipAddress,
+        userAgent,
+        metadata: {
+          source: 'client_event',
+          path: event.path ?? null,
+          payload: event.payload ?? null,
+        },
+        sourceType: 'client_event',
+        sourceId: event.traceId ?? event.sessionId ?? null,
+      }),
+    ));
+
+    return { accepted: createdRows.count ?? body.events.length };
   }
 
   @Get()

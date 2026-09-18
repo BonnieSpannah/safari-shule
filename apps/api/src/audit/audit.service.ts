@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { getContext, runWithBypass } from '../common/context/request-context';
+import { ActivityService } from './activity/activity.service';
 
 export interface AuditRecord {
   tenantId?: string | null;
@@ -16,7 +17,10 @@ export interface AuditRecord {
 export class AuditService {
   private readonly logger = new Logger(AuditService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly activity: ActivityService,
+  ) {}
 
   async record(payload: AuditRecord): Promise<void> {
     const ctx = getContext();
@@ -26,7 +30,7 @@ export class AuditService {
       return;
     }
     try {
-      await runWithBypass(() =>
+      const created = await runWithBypass(() =>
         this.prisma.auditLog.create({
           data: {
             tenantId,
@@ -42,6 +46,28 @@ export class AuditService {
           } as any,
         }),
       );
+
+      await this.activity.recordSilent({
+        tenantId,
+        actorUserId: ctx?.userId ?? null,
+        channel: ctx?.channel ?? 'api',
+        action: payload.action,
+        resourceType: payload.entityType,
+        resourceId: payload.entityId ?? null,
+        requestId: ctx?.requestId ?? null,
+        traceId: ctx?.traceId ?? null,
+        sessionId: ctx?.sessionId ?? null,
+        ipAddress: ctx?.ip ?? null,
+        userAgent: ctx?.userAgent ?? null,
+        metadata: {
+          source: 'audit_log',
+          auditLogId: created.id,
+          beforePresent: Boolean(payload.before),
+          afterPresent: Boolean(payload.after),
+        },
+        sourceType: 'audit_log',
+        sourceId: created.id,
+      });
     } catch (err) {
       this.logger.error({ err }, 'audit.record failed');
     }

@@ -18,6 +18,7 @@ interface LiveLocation {
 }
 
 const NAIROBI_CENTER: [number, number] = [-1.2864, 36.8219];
+const EMPTY_TRIPS: Trip[] = [];
 
 function socketBaseUrl(): string {
   if (env.apiUrl) return env.apiUrl;
@@ -35,7 +36,7 @@ export function LiveTripsMapCard() {
     refetchInterval: 30_000,
   });
 
-  const activeTrips = tripsQuery.data?.data ?? [];
+  const activeTrips = tripsQuery.data?.data ?? EMPTY_TRIPS;
 
   useEffect(() => {
     if (!token || activeTrips.length === 0) return;

@@ -53,16 +53,6 @@ const READ_OPERATIONS = new Set([
   'groupBy',
 ]);
 
-const WRITE_OPERATIONS = new Set([
-  'create',
-  'createMany',
-  'update',
-  'updateMany',
-  'upsert',
-  'delete',
-  'deleteMany',
-]);
-
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);

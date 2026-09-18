@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { getContext, requireTenantId, runWithBypass } from '../../common/context/request-context';
+import { requireTenantId, runWithBypass } from '../../common/context/request-context';
 import { MPESA_PROVIDER, type MpesaProvider } from './tokens';
 import { buildPagination, paginated } from '../../common/pagination/pagination';
 import { MetricsService } from '../../common/metrics/metrics.service';

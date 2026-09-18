@@ -51,12 +51,32 @@ describe('Audit client events (e2e)', () => {
     );
     expect(stored.length).toBe(1);
     expect(stored[0]?.kind).toBe('view');
+
+    const activity = await runWithBypass(() =>
+      prisma.activityEvent.findFirst({
+        where: {
+          tenantId: tenant.tenantId,
+          action: 'view',
+          resourceType: 'payments',
+          sourceType: 'client_event',
+        },
+        orderBy: { occurredAt: 'desc' },
+      }),
+    );
+    expect(activity).toMatchObject({
+      tenantId: tenant.tenantId,
+      actorUserId: tenant.adminUserId,
+      channel: 'web',
+      action: 'view',
+      resourceType: 'payments',
+    });
   });
 
   it('rejects unauthenticated requests', async () => {
-    const res = await request(app.getHttpServer()).post('/v1/audit/events').send({
-      events: [{ kind: 'view' }],
-    });
+    const res = await request(app.getHttpServer())
+      .post('/v1/audit/events')
+      .set('x-tenant-id', tenant.tenantId)
+      .send({ events: [{ kind: 'view' }] });
     expect(res.status).toBe(401);
   });
 });

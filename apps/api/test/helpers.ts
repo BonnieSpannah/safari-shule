@@ -9,6 +9,7 @@ import { AuthService } from '../src/auth/auth.service';
 import { runWithBypass } from '../src/common/context/request-context';
 import { encryptSecret, sha256 } from '../src/common/crypto/secret-encryption';
 import { RedisIoAdapter } from '../src/common/realtime/redis-io.adapter';
+import { configureBullBoard } from '../src/common/bull-board/bull-board';
 
 export interface SeededTenant {
   tenantId: string;
@@ -40,6 +41,7 @@ export async function bootstrapTestApp(): Promise<{
   const ioAdapter = new RedisIoAdapter(app);
   await ioAdapter.connectToRedis();
   app.useWebSocketAdapter(ioAdapter);
+  configureBullBoard(app);
   await app.init();
 
   const prisma = app.get(PrismaService);

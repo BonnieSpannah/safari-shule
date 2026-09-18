@@ -116,6 +116,7 @@ function ChangePasswordCard({
   expiresInDays?: number;
 }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const setUser = useAuthStore((s) => s.setUser);
   const form = useForm<ChangePasswordInput>({
     resolver: zodResolver(changePasswordSchema),

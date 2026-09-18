@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components */
+
 import { useQuery } from '@tanstack/react-query';
 import { Building2 } from 'lucide-react';
 import React from 'react';

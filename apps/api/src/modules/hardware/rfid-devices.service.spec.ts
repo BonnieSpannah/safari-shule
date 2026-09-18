@@ -1,5 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { randomBytes } from 'node:crypto';
 import { RfidDevicesService } from './rfid-devices.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { sha256 } from '../../common/crypto/secret-encryption';

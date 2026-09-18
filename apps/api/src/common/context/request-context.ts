@@ -1,11 +1,16 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+export type ActivityChannel = 'web' | 'mobile' | 'api' | 'system';
+
 export interface RequestContext {
   requestId: string;
   tenantId: string | null;
   userId: string | null;
   ip: string | null;
   userAgent: string | null;
+  channel: ActivityChannel;
+  traceId?: string | null;
+  sessionId?: string | null;
   bypassTenantScope: boolean;
 }
 
@@ -35,6 +40,9 @@ export function runWithBypass<T>(fn: () => Promise<T>): Promise<T> {
         userId: null,
         ip: null,
         userAgent: null,
+        channel: 'system',
+        traceId: null,
+        sessionId: null,
         bypassTenantScope: true,
       };
   return requestContext.run(next, fn);

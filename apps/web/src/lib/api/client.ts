@@ -1,4 +1,4 @@
-import axios, { AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
+import axios, { type AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 import { env, resolveTenantSlugFromHost } from '@/lib/env';
 import { useAuthStore } from '@/stores/auth.store';
 

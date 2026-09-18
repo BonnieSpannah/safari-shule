@@ -4,11 +4,11 @@ TDD is enforced, not suggested. Loop: **red → green → refactor**.
 
 ## Test pyramid
 
-| Layer | Where | Framework | Target share |
-|---|---|---|---|
-| Unit | `apps/api/src/**/*.spec.ts`, `apps/web/src/**/*.test.tsx` | Jest (API), Vitest (web) | ~60% |
-| Integration | `apps/api/src/**/*.int-spec.ts` | Jest + real Postgres | ~25% |
-| E2E | `apps/api/test/*.e2e-spec.ts`, `apps/web/e2e/*.spec.ts` *(M5)* | Jest+supertest (API), Playwright (web) | ~15% |
+| Layer       | Where                                                          | Framework                              | Target share |
+| ----------- | -------------------------------------------------------------- | -------------------------------------- | ------------ |
+| Unit        | `apps/api/src/**/*.spec.ts`, `apps/web/src/**/*.test.tsx`      | Jest (API), Vitest (web)               | ~60%         |
+| Integration | `apps/api/src/**/*.int-spec.ts`                                | Jest + real Postgres                   | ~25%         |
+| E2E         | `apps/api/test/*.e2e-spec.ts`, `apps/web/e2e/*.spec.ts` _(M5)_ | Jest+supertest (API), Playwright (web) | ~15%         |
 
 ## Coverage gates
 
@@ -52,13 +52,15 @@ pnpm --filter @safari-shule/web run test:coverage
 
 Located in `apps/api/test/`:
 
-| File | What it locks in |
-|---|---|
-| `cross-tenant-isolation.e2e-spec.ts` | Tenant A cannot read/write Tenant B's data via any path |
-| `permissions.e2e-spec.ts` | RBAC blocks forbidden actions with 403 |
-| `feature-gating.e2e-spec.ts` | Plan-tier features + quotas enforced |
-| `hardware-hmac.e2e-spec.ts` | HMAC validity, timestamp skew, replay rejection |
-| `sos.e2e-spec.ts` | SOS persist + broadcast + SMS legs |
+| File                                 | What it locks in                                                                    |
+| ------------------------------------ | ----------------------------------------------------------------------------------- |
+| `cross-tenant-isolation.e2e-spec.ts` | Tenant A cannot read/write Tenant B's data via any path                             |
+| `permissions.e2e-spec.ts`            | RBAC blocks forbidden actions with 403                                              |
+| `feature-gating.e2e-spec.ts`         | Plan-tier features + quotas enforced                                                |
+| `hardware-hmac.e2e-spec.ts`          | HMAC validity, timestamp skew, replay rejection                                     |
+| `sos.e2e-spec.ts`                    | SOS persist + broadcast + SMS legs                                                  |
+| `audit-events.e2e-spec.ts`           | Authenticated client audit batches + canonical activity ledger dual-write           |
+| `activity.e2e-spec.ts`               | Canonical activity recording, tenant isolation, filtering, ordering, and pagination |
 
 Test helpers in `apps/api/test/helpers.ts`:
 
@@ -139,3 +141,18 @@ A feature is done when:
 - ✅ New tests cover the happy path, one edge case, and one failure mode
 - ✅ Coverage gates met
 - ✅ Docs updated if the API contract or setup steps changed
+
+## Final verification matrix
+
+Run these before integrating a cross-platform release:
+
+```bash
+pnpm --filter @safari-shule/api exec tsc --noEmit
+pnpm --filter @safari-shule/api run lint
+pnpm --filter @safari-shule/api run test:e2e
+pnpm --filter @safari-shule/web run typecheck
+pnpm --filter @safari-shule/web run lint
+pnpm --filter @safari-shule/web run test
+pnpm --filter @safari-shule/web run build
+(cd apps/mobile && flutter analyze && flutter test)
+```

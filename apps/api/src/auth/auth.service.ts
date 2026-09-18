@@ -17,7 +17,7 @@ import {
   type UserSession,
 } from '@safari-shule/shared-types';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { runWithBypass, getContext } from '../common/context/request-context';
+import { runWithBypass } from '../common/context/request-context';
 import { CommunicationsService } from '../comms/communications.service';
 import type { JwtAccessClaims, JwtRefreshClaims } from './auth.types';
 

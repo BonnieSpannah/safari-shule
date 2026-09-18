@@ -14,23 +14,20 @@ Kenyan multi-tenant school transport SaaS. Five modules:
 
 ## Build status
 
-- `pnpm --filter @safari-shule/api run build` → **exit 0**
-- `pnpm --filter @safari-shule/api exec tsc --noEmit` → **exit 0**
-- `pnpm --filter @safari-shule/api exec tsc --noEmit -p test/tsconfig.test.json` → **exit 0**
-- `pnpm --filter @safari-shule/web run typecheck` → **exit 0**
-- e2e suite: **green** — last ran against `make infra` + `make db-migrate` (PostGIS 16 + Redis 7). All 13 spec files pass.
+- Verified on 2026-09-18: API typecheck, lint, build, and unit suite (5 tests); API e2e suite (19 suites, 106 tests); web typecheck, lint, Vitest suite (16 files, 86 tests), and production build; Flutter analyze and test suite (171 tests); browser smoke test of `/login` with no console errors.
+- API, web, and Flutter verification commands are listed in `docs/TESTING.md`. Run the complete matrix before every integration.
 
 ## Milestone completion status
 
-| Milestone                                                            | Status         | Notes                                                                                  |
-| -------------------------------------------------------------------- | -------------- | -------------------------------------------------------------------------------------- |
-| M1 — Auth + Tenancy + RBAC skeleton                                  | ✅ done        |                                                                                        |
-| M2 — Back-office portal (Students, Fleet, Routes, Parents, Settings) | ✅ done        |                                                                                        |
-| M3 — Stabilize + e2e green                                           | ✅ done        | DataTable v3 + export; e2e suite passing                                               |
-| M4 — Web admin MVP                                                   | ✅ done        | All admin pages wired; Prometheus metrics, DNC, Bull Board, audit event sink committed |
-| M5 — CI/CD hardening                                                 | ✅ done        | Husky gates + deploy/promotion/rollback workflows + branch protection script added     |
-| M6 — QuickStart docs                                                 | ✅ done        | install-mac.md, first-run.md, e2e-walkthrough.md, user-guide/admin.md                  |
-| M7 — Flutter mobile                                                  | ❌ not started |                                                                                        |
+| Milestone                                                            | Status  | Notes                                                                                                          |
+| -------------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------- |
+| M1 — Auth + Tenancy + RBAC skeleton                                  | ✅ done |                                                                                                                |
+| M2 — Back-office portal (Students, Fleet, Routes, Parents, Settings) | ✅ done |                                                                                                                |
+| M3 — Stabilize + e2e green                                           | ✅ done | DataTable v3 + export; e2e suite passing                                                                       |
+| M4 — Web admin MVP                                                   | ✅ done | All admin pages wired; Prometheus metrics, DNC, Bull Board, audit event sink committed                         |
+| M5 — CI/CD hardening                                                 | ✅ done | Husky gates + deploy/promotion/rollback workflows + branch protection script added                             |
+| M6 — QuickStart docs                                                 | ✅ done | install-mac.md, first-run.md, e2e-walkthrough.md, user-guide/admin.md                                          |
+| M7 — Flutter mobile                                                  | ✅ done | Role-aware driver, assistant, and parent workflows; offline/realtime handling and platform build configuration |
 
 ## What's done — apps/api
 
@@ -139,10 +136,14 @@ Branch protection automation:
 
 The seed prints the generated RFID device `apiKey` and `hmacSecret` once at the end — capture them for curl/Postman demos.
 
+## Activity logging
+
+- `ActivityEvent` is the canonical tenant-scoped ledger.
+- Existing `AuditLog` and authenticated `POST /v1/audit/events` traffic dual-write to it using best-effort persistence.
+- Request context accepts `x-client-channel` (`web`, `mobile`, or `api`), `x-trace-id`, and `x-session-id` for ledger correlation.
+
 ## Git state
 
 - Repo: `github.com/BonnieSpannah/safari-shule` (private)
 - Local: `~/Projects/me/safari-shule`
-- Branch: `feature/m5-husky-deploy-workflows`
-- HEAD: `225c44c` (base from `main` before local feature commits)
-- Remote: branch not pushed yet; local changes staged for M5 completion work
+- Branch: `main`, synchronized with `origin/main` after release integration.
